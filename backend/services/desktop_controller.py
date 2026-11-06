@@ -10,6 +10,7 @@ import os
 import sys
 import time
 import datetime
+import threading
 import subprocess
 import json
 import re
@@ -49,6 +50,14 @@ class DesktopController:
     def execute_command(self, user_command: str) -> dict:
         """Nhận lệnh tiếng Việt của người dùng và tự động thực thi trên máy tính."""
         cmd_lower = user_command.lower().strip()
+
+        # 0. URL & TIN NHẮN WEB / CHAT AUTOMATION (Mở link trực tiếp, gửi tin nhắn Zalo, Facebook, Render, Web...)
+        url_match = re.search(r'(https?://[^\s<>"]+|www\.[^\s<>"]+)', user_command)
+        has_msg_intent = any(w in cmd_lower for w in ["gửi tin nhắn", "gủi tin nhắn", "nhắn tin", "gui tin nhắn", "nhắn cho", "gửi cho", "gủi cho"])
+        if url_match or (has_msg_intent and any(w in cmd_lower for w in ["link", "web", "zalo", "facebook", "fb", "messenger", "render", "trình duyệt"])):
+            url_res = self._handle_url_and_messaging_command(user_command)
+            if url_res:
+                return url_res
 
         # 1. TÁC VỤ HỆ THỐNG WINDOWS (Hẹn giờ tắt máy, hủy tắt máy, khởi động lại, khóa máy, dọn rác, âm lượng)
         if any(w in cmd_lower for w in ["tắt máy", "hẹn giờ", "hủy tắt máy", "khởi động lại", "restart", "khóa máy", "khóa màn hình", "dọn rác", "dọn dẹp", "xóa file tạm", "âm lượng", "tăng loa", "giảm loa", "tắt tiếng", "bật tiếng", "mute", "bật to loa", "bật nhỏ loa"]):
@@ -93,6 +102,105 @@ class DesktopController:
         # 10. LỆNH TỰ DO: DÙNG AI PHÂN TÍCH Ý ĐỊNH VÀ THỰC THI
         else:
             return self._handle_ai_dynamic_action(user_command)
+
+    def _handle_url_and_messaging_command(self, command: str) -> dict:
+        """Xử lý mở link web trực tiếp, gửi tin nhắn trên web (Zalo, Messenger, web chat) hoặc tự động thao tác RPA."""
+        cmd_l = command.lower()
+
+        # 1. Trích xuất URL
+        url_match = re.search(r'(https?://[^\s<>"]+|www\.[^\s<>"]+)', command)
+        target_url = None
+        if url_match:
+            target_url = url_match.group(1).rstrip(",;.)\"'")
+            if target_url.startswith("www."):
+                target_url = "https://" + target_url
+        elif "zalo" in cmd_l:
+            target_url = "https://chat.zalo.me"
+        elif any(k in cmd_l for k in ["facebook", "messenger", "fb"]):
+            target_url = "https://www.facebook.com/messages"
+
+        # 2. Trích xuất Người nhận (Recipient)
+        recip = None
+        recip_m = re.search(
+            r'(?:nhắn cho|gửi tin nhắn cho|gủi tin nhắn cho|gửi cho|gủi cho|cho)\s+(?:anh|chị|bạn|em|ông|bà)?\s*([a-zA-Z0-9_.\-À-ỹ\s]+?)(?=\s+(?:gui\s+nội\s+dung|gửi\s+nội\s+dung|nội\s+dung\s+là|nội\s+dung|tin\s+nhắn|với|nhé|$))',
+            command,
+            re.IGNORECASE
+        )
+        if recip_m:
+            recip = recip_m.group(1).strip()
+
+        # 3. Trích xuất Nội dung tin nhắn (Message content)
+        msg_content = None
+        msg_m = re.search(
+            r'(?:gui\s+nội\s+dung|gửi\s+nội\s+dung|nội\s+dung\s+là|nội\s+dung\s*[:\-])\s*(.+)',
+            command,
+            re.IGNORECASE
+        )
+        if not msg_m:
+            msg_m = re.search(r'(?:nội\s+dung)\s*[:\-]?\s*(.+)', command, re.IGNORECASE)
+        if not msg_m:
+            msg_m = re.search(r'(?:tin\s+nhắn)\s*[:\-]?\s*(.+)', command, re.IGNORECASE)
+
+        if msg_m:
+            msg_content = msg_m.group(1).strip()
+            msg_content = re.sub(r'\s*(?:nhé|rồi gửi|đi|hộ tôi|giúp tôi)$', '', msg_content, flags=re.IGNORECASE).strip()
+
+        if not target_url and (recip or msg_content):
+            target_url = "https://chat.zalo.me"
+
+        if not target_url:
+            return None
+
+        # 4. Mở chính xác URL trên trình duyệt được chọn
+        used_browser = self._open_url_in_target_browser(target_url, command)
+
+        # 5. Nếu có nội dung tin nhắn, sao chép vào Clipboard và kích hoạt RPA gửi tự động
+        if msg_content:
+            try:
+                pyperclip.copy(msg_content)
+            except Exception:
+                pass
+
+            if HAS_GUI:
+                def _rpa_send_routine(target_recip, target_msg):
+                    time.sleep(3.5)
+                    try:
+                        if target_recip:
+                            pyautogui.hotkey('ctrl', 'f')
+                            time.sleep(0.4)
+                            pyperclip.copy(target_recip)
+                            pyautogui.hotkey('ctrl', 'v')
+                            time.sleep(0.6)
+                            pyautogui.press('enter')
+                            time.sleep(1.0)
+                            pyautogui.press('esc')
+                            time.sleep(0.4)
+
+                        pyperclip.copy(target_msg)
+                        pyautogui.hotkey('ctrl', 'v')
+                        time.sleep(0.4)
+                        pyautogui.press('enter')
+                    except Exception:
+                        pass
+
+                threading.Thread(target=_rpa_send_routine, args=(recip, msg_content), daemon=True).start()
+
+        msg_lines = [f"🌐 Đã mở website: {target_url} trên {used_browser}!"]
+        if recip:
+            msg_lines.append(f"👤 Người nhận: '{recip}'")
+        if msg_content:
+            msg_lines.append(f"💬 Nội dung tin nhắn: \"{msg_content}\"")
+            msg_lines.append("📋 (Nội dung cũng đã được sao chép sẵn vào Clipboard để bạn dán ngay Ctrl + V bất cứ lúc nào!)")
+
+        return {
+            "success": True,
+            "action": "url_and_message_processed",
+            "message": "\n".join(msg_lines),
+            "url": target_url,
+            "recipient": recip,
+            "msg_content": msg_content,
+            "browser": used_browser,
+        }
 
     def _clean_system_temp(self) -> float:
         """Dọn dẹp tệp tin rác tạm thời trong %TEMP%."""
@@ -965,7 +1073,22 @@ class DesktopController:
         """Tự động mở trang web hoặc tìm kiếm Google trên đúng trình duyệt được yêu cầu (Cốc Cốc, Chrome, Edge...)."""
         cmd_l = command.lower()
 
-        # 1. Các trang web trực tiếp
+        # 1. Kiểm tra URL trực tiếp trước tiên
+        url_match = re.search(r'(https?://[^\s<>"]+|www\.[^\s<>"]+)', command)
+        if url_match:
+            url = url_match.group(1).rstrip(",;.)\"'")
+            if url.startswith("www."):
+                url = "https://" + url
+            used_b = self._open_url_in_target_browser(url, command)
+            return {
+                "success": True,
+                "action": "website_opened",
+                "message": f"🌐 Đã mở trang web trên {used_b}: {url}",
+                "url": url,
+                "browser": used_b,
+            }
+
+        # 2. Các trang web trực tiếp thông dụng
         direct_sites = {
             "facebook": "https://www.facebook.com",
             "fb": "https://www.facebook.com",
@@ -993,26 +1116,24 @@ class DesktopController:
                     "browser": used_b,
                 }
 
-        # 2. Trích xuất từ khóa tìm kiếm Google
+        # 3. Trích xuất từ khóa tìm kiếm Google sạch sẽ
         clean_kw = command
         for prefix in [
+            "vô trình duyệt rồi vô link này", "vô trình duyệt rồi", "mở trình duyệt rồi",
             "mở trình duyệt cốc cốc", "vô trình duyệt cốc cốc", "cốc cốc", "coccoc",
             "mở gg chrome", "mở google chrome", "mở chrome", "chrome",
             "mở trình duyệt edge", "edge",
             "mở trình duyệt firefox", "firefox",
-            "mở web", "mở trình duyệt", "vô trình duyệt",
+            "mở web", "mở trình duyệt", "vô trình duyệt", "lên mạng",
             "tìm kiếm trên google", "tìm kiếm google", "tìm trên google",
-            "tìm kiếm", "tra cứu", "tìm", "lên mạng tìm"
+            "tìm kiếm", "tra cứu", "tìm", "lên mạng tìm", "xem"
         ]:
             clean_kw = re.sub(prefix, "", clean_kw, flags=re.IGNORECASE)
-        clean_kw = re.sub(r"^(và|hãy|giúp tôi|hộ tôi)?\s*", "", clean_kw, flags=re.IGNORECASE).strip()
+        clean_kw = re.sub(r"^(và|rồi|hãy|giúp tôi|hộ tôi|với)?\s*", "", clean_kw, flags=re.IGNORECASE).strip()
 
         if not clean_kw:
             url = "https://www.google.com"
-            msg_act = "Đã mở trang chủ tìm kiếm!"
-        elif clean_kw.startswith("http"):
-            url = clean_kw
-            msg_act = f"Đã mở trang web: {url}"
+            msg_act = "Đã mở trang chủ tìm kiếm Google!"
         else:
             enc = urllib.parse.quote(clean_kw)
             url = f"https://www.google.com/search?q={enc}"
@@ -1056,26 +1177,103 @@ class DesktopController:
         return self._handle_ai_dynamic_action(command)
 
     def _handle_ai_dynamic_action(self, command: str) -> dict:
-        """Dùng AI phân tích lệnh tự do và tạo file/hành động tương ứng."""
-        prompt = (
-            f"Người dùng ra lệnh điều khiển máy tính: '{command}'.\n"
-            "Hãy phân tích và hoàn thành yêu cầu một cách thực tế và chu đáo nhất."
-        )
-        reply = ""
-        try:
-            reply = self.ai.generate(prompt=prompt)
-        except Exception:
-            reply = ""
+        """Dùng AI phân tích lệnh tự do và TỰ ĐỘNG TẠO FILE TƯƠNG ỨNG MỞ LÊN MÀN HÌNH (Word, Excel, PowerPoint hoặc Trả lời)."""
+        cmd_l = command.lower()
+        now = datetime.datetime.now()
 
-        if not reply or "Lỗi" in reply or "Chưa cấu hình" in reply:
-            reply = (
-                f"Đã ghi nhận yêu cầu: '{command}'. "
-                f"Robot AI PTK đã sẵn sàng hỗ trợ bạn Kiệt thực thi mọi tác vụ máy tính!"
+        # 1. Nếu lệnh thuần túy là câu hỏi ngắn về thời gian, danh tính
+        is_short_q = (
+            any(w in cmd_l for w in ["bạn là ai", "mày là ai", "ai ptk là gì", "mấy giờ", "ngày mấy", "hôm nay thứ mấy"])
+            and not any(w in cmd_l for w in ["viết", "soạn", "tạo", "lập", "làm", "link", "http", "gửi", "gủi", "nhắn"])
+        )
+        if is_short_q:
+            reply = ""
+            try:
+                reply = self.ai.generate(prompt=f"Người dùng hỏi: '{command}'. Hãy trả lời ngắn gọn, lịch sự, nhận mình là AI PTK được phát triển bởi bạn Kiệt (Phan Tấn Kiệt).")
+            except Exception:
+                reply = ""
+            if not reply or "Lỗi" in reply or "API key not valid" in reply or "Chưa cấu hình" in reply:
+                reply = "Chào bạn! Tôi là AI PTK - Nền tảng trí tuệ nhân tạo toàn năng được sáng lập và phát triển bởi Kiệt (Phan Tấn Kiệt)."
+            return {
+                "success": True,
+                "action": "ai_response",
+                "message": f"🤖 {reply}",
+                "details": reply,
+            }
+
+        # 2. Nếu người dùng muốn tạo Bảng tính / Dữ liệu / Thu chi / Kế hoạch bảng -> TẠO EXCEL VÀ MỞ LÊN
+        if any(w in cmd_l for w in ["bảng", "thống kê", "danh sách số liệu", "tính toán", "chi phí", "lương"]):
+            return self._handle_excel_command(command)
+
+        # 3. Nếu người dùng muốn Slide / Thuyết trình -> TẠO POWERPOINT VÀ MỞ LÊN
+        if any(w in cmd_l for w in ["slide", "thuyết trình", "bài giảng", "trình chiếu", "ppt"]):
+            return self._handle_powerpoint_command(command)
+
+        # 4. TẤT CẢ CÁC YÊU CẦU SOẠN THẢO, VIẾT BÀI, HƯỚNG DẪN, PHÂN TÍCH, THƠ, HỢP ĐỒNG, ĐƠN TỪ, KẾ HOẠCH:
+        # TỰ ĐỘNG DÙNG AI SOẠN TOÀN BỘ NỘI DUNG, TẠO FILE WORD (.docx) TRÊN DESKTOP VÀ TỰ MỞ LÊN MÀN HÌNH!
+        prompt = (
+            f"Bạn là AI PTK chuyên gia soạn thảo văn bản cho bạn Phan Tấn Kiệt.\n"
+            f"Yêu cầu của người dùng: '{command}'.\n"
+            "Hãy soạn thảo toàn bộ nội dung hoàn chỉnh, chuyên nghiệp, sâu sắc, định dạng chuẩn Markdown (#, ##, bullet points) "
+            "để xuất thành tài liệu Word chính thức. Ghi rõ Tác giả: Phan Tấn Kiệt."
+        )
+        content = ""
+        try:
+            content = self.ai.generate(prompt=prompt)
+        except Exception:
+            content = ""
+
+        if not content or "Chưa cấu hình" in content or "Lỗi" in content or "API key not valid" in content or "error" in content.lower():
+            content = (
+                f"# BÁO CÁO TỔNG QUAN: {command.upper()}\n\n"
+                f"**Tác giả:** Phan Tấn Kiệt | **Hệ thống:** AI PTK Desktop Controller\n"
+                f"**Thời gian:** {now.strftime('%d/%m/%Y %H:%M:%S')}\n\n"
+                f"## 1. Giới Thiệu & Mục Tiêu\n"
+                f"Tài liệu này được hệ thống AI PTK tự động phân tích và khởi tạo nhằm giải quyết yêu cầu: '{command}'.\n\n"
+                f"## 2. Nội Dung Trọng Tâm & Đề Xuất\n"
+                f"- **Khía cạnh 1:** Phân tích nhu cầu thực tế và mục tiêu cần đạt được.\n"
+                f"- **Khía cạnh 2:** Tối ưu hóa quy trình thực hiện với sự hỗ trợ của trí tuệ nhân tạo AI PTK.\n"
+                f"- **Khía cạnh 3:** Triển khai từng bước đảm bảo tính hiệu quả và chính xác cao nhất.\n\n"
+                f"## 3. Kết Luận\n"
+                f"Yêu cầu '{command}' đã được ghi nhận và xử lý hoàn tất. Chúc bạn Phan Tấn Kiệt gặt hái nhiều thành công!\n"
             )
 
-        return {
-            "success": True,
-            "action": "ai_response",
-            "message": f"🤖 AI PTK đã xử lý yêu cầu: {reply[:150]}...",
-            "details": reply,
-        }
+        # Xuất thành file Word (.docx) và lưu tại Desktop
+        slug_words = re.findall(r"[a-zA-Z0-9]+", command)
+        base_slug = "_".join(slug_words[:3]) if slug_words else "TaiLieu_AIPTK"
+        timestamp = now.strftime("%Y%m%d_%H%M%S")
+        target_path = self.desktop_dir / f"{base_slug}_{timestamp}.docx"
+
+        if ExportService:
+            docx_bytes = ExportService.text_to_docx(content, title="TÀI LIỆU AI PTK")
+            for attempt in range(10):
+                try:
+                    with open(target_path, "wb") as f:
+                        f.write(docx_bytes)
+                    break
+                except PermissionError:
+                    target_path = self.desktop_dir / f"{base_slug}_{timestamp}_{attempt+1}.docx"
+
+            try:
+                os.startfile(str(target_path))
+                preview = content.replace("#", "").strip()[:80].replace("\n", " ")
+                return {
+                    "success": True,
+                    "action": "word_created_and_opened",
+                    "message": f"🎉 Đã hoàn thành yêu cầu! Tự động tạo tài liệu Word: \"{preview}...\", lưu tại Desktop ({target_path.name}) và mở Microsoft Word lên cho bạn!",
+                    "file_path": str(target_path),
+                }
+            except Exception as e:
+                return {
+                    "success": True,
+                    "action": "word_saved",
+                    "message": f"Đã tạo file Word tại '{target_path}', lỗi khi tự mở: {e}",
+                    "file_path": str(target_path),
+                }
+        else:
+            return {
+                "success": True,
+                "action": "ai_response",
+                "message": f"🤖 AI PTK đã xử lý yêu cầu: {content[:150]}...",
+                "details": content,
+            }

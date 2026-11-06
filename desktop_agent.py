@@ -147,6 +147,8 @@ class DesktopAgentGUI:
             ("📊 Mở PPT tạo 20 Slide Đỏ Size 30pt", "vô ppt tao 20 slie thuyết trình về công nghệ ai ptk đi màu đỏ , tất cả chữ sie 30pt"),
             ("📝 Mở Word ghi tên Kiệt 100 lần", "vô word rồi ghi tên Kiệt 100 lần trong word đi"),
             ("💰 Mở Excel tạo Bảng Thu Chi", "Mở Excel tạo bảng quản lý thu chi cá nhân 1 tháng"),
+            ("💬 Mở ZaloChat Gửi Tin Nhắn", "vô trình duyệt rồi vô link này https://nhantinptk.onrender.com/ gủi tin nhắn cho phantaanskieetj gui nội dung chào kiệt mày là ai ptk"),
+            ("📄 Tự Viết Báo Cáo AI PTK (Word)", "viết một bài giới thiệu về bạn Kiệt và dự án AI PTK"),
             ("⏱️ Hẹn Giờ Tắt Máy (30 phút)", "Hẹn giờ tắt máy sau 30 phút"),
             ("🚫 Hủy Hẹn Giờ Tắt Máy", "Hủy tắt máy"),
             ("🧹 Dọn Dẹp Rác Máy Tính (%TEMP%)", "Dọn dẹp rác máy tính"),
