@@ -433,8 +433,14 @@ class ExportService:
         return cls._pure_python_xlsx(headers, rows, sheet_name=title[:30])
 
     @classmethod
-    def text_to_pptx(cls, markdown_or_slides_text: str, title: str = "BÀI THUYẾT TRÌNH AI PTK") -> bytes:
-        """Tạo bài thuyết trình PowerPoint (.pptx) chuẩn đồ họa cao cấp: Khung viền thẻ, chuyển động slide và phối màu Đỏ - Xanh - Vàng."""
+    def text_to_pptx(
+        cls,
+        markdown_or_slides_text: str,
+        title: str = "BÀI THUYẾT TRÌNH AI PTK",
+        theme_color: str = "auto",
+        font_size: int = None,
+    ) -> bytes:
+        """Tạo bài thuyết trình PowerPoint (.pptx) chuẩn đồ họa cao cấp: Tuân thủ 100% màu sắc và cỡ chữ yêu cầu."""
         try:
             from pptx import Presentation
             from pptx.util import Inches, Pt
@@ -447,13 +453,58 @@ class ExportService:
             prs.slide_width = Inches(13.333)
             prs.slide_height = Inches(7.5)
 
-            # Bảng màu chuyên nghiệp: Đỏ rực rỡ, Xanh công nghệ, Vàng hoàng gia
+            # Cỡ chữ chuẩn theo yêu cầu
+            actual_font_size = int(font_size) if font_size and int(font_size) >= 10 else 16
+
+            # Cấu hình màu sắc theo yêu cầu cụ thể của người dùng
+            color_themes = {
+                "red": {
+                    "banner": RGBColor(185, 28, 28),
+                    "border": RGBColor(220, 38, 38),
+                    "bg": RGBColor(254, 242, 242),
+                    "text": RGBColor(220, 38, 38),
+                    "title_text": RGBColor(255, 255, 255),
+                },
+                "blue": {
+                    "banner": RGBColor(30, 64, 175),
+                    "border": RGBColor(37, 99, 235),
+                    "bg": RGBColor(239, 246, 255),
+                    "text": RGBColor(30, 64, 175),
+                    "title_text": RGBColor(255, 255, 255),
+                },
+                "gold": {
+                    "banner": RGBColor(180, 83, 9),
+                    "border": RGBColor(217, 119, 6),
+                    "bg": RGBColor(254, 252, 232),
+                    "text": RGBColor(180, 83, 9),
+                    "title_text": RGBColor(255, 255, 255),
+                },
+                "green": {
+                    "banner": RGBColor(4, 120, 87),
+                    "border": RGBColor(16, 185, 129),
+                    "bg": RGBColor(236, 253, 245),
+                    "text": RGBColor(4, 120, 87),
+                    "title_text": RGBColor(255, 255, 255),
+                },
+            }
+
+            req_col = (theme_color or "auto").lower()
+            fixed_theme = None
+            if any(k in req_col for k in ["đỏ", "red"]):
+                fixed_theme = color_themes["red"]
+            elif any(k in req_col for k in ["vàng", "gold", "yellow"]):
+                fixed_theme = color_themes["gold"]
+            elif any(k in req_col for k in ["xanh lá", "green"]):
+                fixed_theme = color_themes["green"]
+            elif any(k in req_col for k in ["xanh", "blue"]):
+                fixed_theme = color_themes["blue"]
+
+            # Bảng màu luân phiên nếu người dùng không chỉ định màu duy nhất
             palette = [
-                # Primary, Accent Red, Accent Gold
-                (RGBColor(30, 64, 175), RGBColor(220, 38, 38), RGBColor(217, 119, 6)),  # Xanh dương chủ đạo
-                (RGBColor(185, 28, 28), RGBColor(37, 99, 235), RGBColor(217, 119, 6)),  # Đỏ nổi bật
-                (RGBColor(217, 119, 6), RGBColor(30, 64, 175), RGBColor(220, 38, 38)),  # Vàng hoàng gia
-                (RGBColor(15, 118, 110), RGBColor(220, 38, 38), RGBColor(37, 99, 235)), # Xanh ngọc
+                color_themes["red"],
+                color_themes["blue"],
+                color_themes["gold"],
+                color_themes["green"],
             ]
 
             sections = re.split(r"(?m)^##\s+", markdown_or_slides_text)
@@ -482,39 +533,39 @@ class ExportService:
                     t_xml = '<p:transition xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" spd="med"><p:wipe dir="r"/></p:transition>'
                 else:
                     t_xml = '<p:transition xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" spd="med"><p:fade/></p:transition>'
-                
+
                 try:
                     slide._element.append(parse_xml(t_xml))
                 except Exception:
                     pass
 
-                c_banner, c_highlight, c_gold = palette[idx % len(palette)]
+                cur_style = fixed_theme if fixed_theme else palette[idx % len(palette)]
 
                 lines = [l.strip() for l in sec.splitlines() if l.strip()]
                 slide_title = lines[0].replace("#", "").strip() if lines else f"Slide {idx+1}"
                 content_lines = lines[1:] if len(lines) > 1 else []
 
-                # 1. THANH BANNER TIÊU ĐỀ NỔI BẬT (TOP BANNER)
+                # 1. THANH BANNER TIÊU ĐỀ
                 banner = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(13.333), Inches(1.3))
                 banner.fill.solid()
-                banner.fill.fore_color.rgb = c_banner
+                banner.fill.fore_color.rgb = cur_style["banner"]
                 banner.line.fill.background()
 
                 btf = banner.text_frame
                 btf.word_wrap = True
                 bp = btf.paragraphs[0]
                 bp.text = slide_title.upper()
-                bp.font.size = Pt(22)
+                bp.font.size = Pt(max(actual_font_size, 22))
                 bp.font.bold = True
-                bp.font.color.rgb = RGBColor(255, 255, 255)
+                bp.font.color.rgb = cur_style["title_text"]
                 bp.alignment = PP_ALIGN.LEFT
 
-                # 2. KHUNG NỘI DUNG THẺ BO GÓC SANG TRỌNG (CARD CONTAINER)
-                card = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.8), Inches(1.6), Inches(11.733), Inches(5.0))
+                # 2. KHUNG NỘI DUNG THẺ BO GÓC
+                card = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.8), Inches(1.5), Inches(11.733), Inches(5.2))
                 card.fill.solid()
-                card.fill.fore_color.rgb = RGBColor(248, 250, 252) # Slate 50
-                card.line.color.rgb = c_highlight
-                card.line.width = Pt(2)
+                card.fill.fore_color.rgb = cur_style["bg"]
+                card.line.color.rgb = cur_style["border"]
+                card.line.width = Pt(2.5)
 
                 ctf = card.text_frame
                 ctf.word_wrap = True
@@ -528,26 +579,22 @@ class ExportService:
                     p = ctf.paragraphs[0] if first else ctf.add_paragraph()
                     first = False
 
-                    # Phối màu chữ ĐỎ, XANH, VÀNG linh hoạt theo từng dòng
                     p.text = f"★ {text_clean}"
-                    p.space_after = Pt(12)
-
-                    if cl.startswith("###") or "tác giả" in text_clean.lower() or "kiệt" in text_clean.lower():
-                        p.font.bold = True
-                        p.font.size = Pt(18)
-                        p.font.color.rgb = RGBColor(220, 38, 38) # ĐỎ NỔI BẬT
-                    elif any(w in text_clean.lower() for w in ["quan trọng", "chú ý", "mục tiêu", "kết quả", "đặc biệt"]):
-                        p.font.bold = True
-                        p.font.size = Pt(16)
-                        p.font.color.rgb = RGBColor(217, 119, 6) # VÀNG KIM
+                    # Điều chỉnh khoảng cách dòng phù hợp với cỡ chữ
+                    if actual_font_size >= 26:
+                        p.space_after = Pt(8)
                     else:
-                        p.font.size = Pt(15)
-                        p.font.color.rgb = RGBColor(30, 64, 175) # XANH CÔNG NGHỆ
+                        p.space_after = Pt(14)
 
-                # 3. CHÂN TRANG HUY HIỆU TÁC GIẢ & BẢN QUYỀN (FOOTER BADGE)
+                    # Áp dụng chính xác cỡ chữ và màu sắc người dùng yêu cầu
+                    p.font.size = Pt(actual_font_size)
+                    p.font.color.rgb = cur_style["text"]
+                    p.font.bold = True if (actual_font_size >= 24 or cl.startswith("###")) else False
+
+                # 3. CHÂN TRANG
                 footer = slide.shapes.add_textbox(Inches(0.8), Inches(6.8), Inches(11.733), Inches(0.4))
                 fp = footer.text_frame.paragraphs[0]
-                fp.text = f"🚀 AI PTK Presentation | Tác giả sáng lập: Phan Tấn Kiệt | Slide {idx+1}/{len(valid_sections)} (Hiệu ứng chuyển động tự động)"
+                fp.text = f"🚀 AI PTK Presentation | Tác giả: Phan Tấn Kiệt | Slide {idx+1}/{len(valid_sections)} (Font: {actual_font_size}pt)"
                 fp.font.size = Pt(10)
                 fp.font.bold = True
                 fp.font.color.rgb = RGBColor(100, 116, 139)

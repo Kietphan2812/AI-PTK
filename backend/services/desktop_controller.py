@@ -245,24 +245,59 @@ class DesktopController:
         now = datetime.datetime.now()
         now_str = now.strftime("Thứ %A, ngày %d/%m/%Y, lúc %H:%M:%S")
 
+        cmd_lower = command.lower()
+
+        # 1. Trích xuất số lượng slide yêu cầu (ví dụ: 20 slide, 10 slide, 12 slide...)
+        slide_m = re.search(r"(\d+)\s*(?:slide|slie|sile|trang)", command, re.IGNORECASE)
+        req_slides = int(slide_m.group(1)) if slide_m else 10
+
+        # 2. Trích xuất cỡ chữ yêu cầu (ví dụ: size 30pt, sie 30, cỡ chữ 24...)
+        size_m = re.search(r"(?:cỡ chữ|chữ|size|sie)\s*(\d+)(?:pt|px)?|(\d+)\s*(?:pt|px)", command, re.IGNORECASE)
+        req_size = None
+        if size_m:
+            req_size = int(size_m.group(1) or size_m.group(2))
+
+        # 3. Trích xuất màu sắc yêu cầu (ví dụ: màu đỏ, màu vàng, màu xanh...)
+        req_color = "auto"
+        if any(k in cmd_lower for k in ["màu đỏ", "đỏ", "red"]):
+            req_color = "red"
+        elif any(k in cmd_lower for k in ["màu vàng", "vàng", "gold", "yellow"]):
+            req_color = "gold"
+        elif any(k in cmd_lower for k in ["màu xanh lá", "xanh lá", "green"]):
+            req_color = "green"
+        elif any(k in cmd_lower for k in ["màu xanh", "xanh dương", "blue"]):
+            req_color = "blue"
+
+        raw_topic = self._clean_command_content(
+            command,
+            [
+                "mở powerpoint", "vô powerpoint", "mở ppt", "vô ppt", "tạo bài thuyết trình",
+                "soạn bài thuyết trình", "tạo slide", "soạn slide", "đề tài", "bài thuyết trình",
+                "màu đỏ", "màu vàng", "màu xanh", "màu xanh lá", "màu tím",
+                "tất cả chữ", "chữ size", "chữ sie", "cỡ chữ", "chữ"
+            ]
+        )
+        if req_size:
+            raw_topic = re.sub(rf"\b{req_size}\s*(?:pt|px)?\b", "", raw_topic, flags=re.IGNORECASE).strip()
+        if req_slides:
+            raw_topic = re.sub(rf"\b{req_slides}\s*(?:slide|slie|sile|trang)\b", "", raw_topic, flags=re.IGNORECASE).strip()
+
+        # Prompt AI chi tiết bắt buộc tuân thủ 100%
         prompt = (
             f"Bạn là chuyên gia thiết kế bài thuyết trình PowerPoint AI PTK cao cấp nhất.\n"
-            f"Người dùng ra lệnh điều khiển máy tính: '{command}'.\n"
+            f"Người dùng ra lệnh: '{command}'.\n"
             f"Thời gian hiện tại: {now_str}.\n"
-            "BẠN PHẢI TUÂN THỦ 100% TẤT CẢ MỌI YÊU CẦU CỦA NGƯỜI DÙNG:\n"
-            "1. TUÂN THỦ CHÍNH XÁC SỐ LƯỢNG VÀ CHỦ ĐỀ TỪNG SLIDE:\n"
-            "   - Nếu người dùng yêu cầu 'giới thiệu ai làm ra bạn':\n"
-            "     * BẮT BUỘC có các slide giới thiệu chi tiết về Phan Tấn Kiệt - Nhà sáng lập, kiến trúc sư trưởng và lập trình viên tạo ra AI PTK.\n"
-            "   - Nếu người dùng yêu cầu '10 slide nói về đủ các chủ đề' (hoặc số lượng cụ thể):\n"
-            "     * Phải tạo ĐẦY ĐỦ đúng số lượng slide yêu cầu về các chủ đề công nghệ, khoa học, đời sống, kinh tế, giáo dục, AI phong phú khác nhau!\n"
-            "2. CẤU TRÚC BẮT BUỘC:\n"
+            "BẠN PHẢI TUÂN THỦ TUYỆT ĐỐI 100% TẤT CẢ MỌI YÊU CẦU CỦA NGƯỜI DÙNG:\n"
+            f"1. SỐ LƯỢNG SLIDE: BẮT BUỘC TẠO ĐỦ {req_slides} SLIDE (từ Slide 1 đến đúng Slide {req_slides}), KHÔNG ĐƯỢC THIẾU DÙ CHỈ 1 SLIDE!\n"
+            f"2. CHỦ ĐỀ CHÍNH: {raw_topic or 'Công nghệ AI PTK'}.\n"
+            "3. CẤU TRÚC BẮT BUỘC:\n"
             "   Mỗi slide bắt đầu bằng: ## Slide X: <Tiêu đề slide hấp dẫn>\n"
             "   Bên dưới gồm các đoạn phân tích sâu sắc, dùng gạch đầu dòng:\n"
-            "   - <Ý chính>\n"
-            "   - <Chi tiết mở rộng>\n"
-            "   - <Đánh giá / Điểm nhấn>\n"
-            "3. DÒNG CUỐI CÙNG GHI: FILENAME: <ten_file_ngan_gon.pptx>\n"
-            "HÃY VIẾT ĐẦY ĐỦ TỪNG SLIDE MỘT, KHÔNG TÓM TẮT, KHÔNG CẮT BỚT ĐỂ ĐẢM BẢO ĐỦ TỔNG SỐ SLIDE."
+            "   - <Ý chính 1>\n"
+            "   - <Ý chính 2>\n"
+            "   - <Ý phân tích chuyên sâu 3>\n"
+            "4. DÒNG CUỐI CÙNG GHI: FILENAME: <ten_file_ngan_gon.pptx>\n"
+            f"HÃY VIẾT ĐẦY ĐỦ TỪNG SLIDE MỘT, KHÔNG TÓM TẮT, KHÔNG CẮT BỚT ĐỂ ĐẢM BẢO ĐỦ {req_slides} SLIDE."
         )
 
         ai_reply = ""
@@ -277,11 +312,6 @@ class DesktopController:
             and "Chưa cấu hình" not in ai_reply
         )
 
-        raw_topic = self._clean_command_content(
-            command,
-            ["mở powerpoint", "vô powerpoint", "mở ppt", "vô ppt", "tạo bài thuyết trình", "soạn bài thuyết trình", "tạo slide", "soạn slide", "đề tài", "bài thuyết trình"]
-        )
-
         if is_ai_valid:
             slides_text = re.sub(r"👉\s*Bạn có thể bấm nút.*?$", "", ai_reply, flags=re.DOTALL).strip()
             fname_m = re.search(r"FILENAME:\s*([^\s\n]+\.pptx)", slides_text, re.IGNORECASE)
@@ -291,62 +321,59 @@ class DesktopController:
             else:
                 base_slug = "ThuyetTrinh_AI_PTK"
         else:
-            base_slug = "ThuyetTrinh_PhanTanKiet"
-            slides_text = (
-                "## Slide 1: Giới Thiệu Tác Giả Sáng Lập AI PTK - Phan Tấn Kiệt\n"
-                "- Phan Tấn Kiệt: Kiến trúc sư trưởng và nhà phát triển độc quyền nền tảng AI PTK\n"
-                "- Tầm nhìn đột phá: Kiến tạo trợ lý AI đa năng điều khiển máy tính tự động bằng tiếng Việt\n"
-                "- Cột mốc cống hiến: Tích hợp trí tuệ nhân tạo toàn diện phục vụ công việc và học tập\n\n"
-                "## Slide 2: Sứ Mệnh & Công Nghệ Cốt Lõi Của Phan Tấn Kiệt\n"
-                "- Phát triển hệ thống tự động hóa RPA điều khiển Word, Excel, PowerPoint không cần thao tác thủ công\n"
-                "- Kết nối đa não bộ AI thông minh nhất thế giới: Gemini, DeepSeek, OpenAI, Claude\n"
-                "- Tối ưu hóa trải nghiệm người dùng với tốc độ xử lý tức thì và bảo mật tuyệt đối\n\n"
-                "## Slide 3: Kỷ Nguyên Trí Tuệ Nhân Tạo (Generative AI)\n"
-                "- Sự bùng nổ của mô hình ngôn ngữ lớn (LLM) tái định hình toàn bộ nền kinh tế số\n"
-                "- Khả năng tự động hóa quy trình làm việc từ soạn thảo tài liệu đến lập trình thông minh\n"
-                "- Ứng dụng AI nâng cao năng suất lao động lên gấp 10 lần\n\n"
-                "## Slide 4: Điện Toán Đám Mây & Hạ Tầng Dữ Liệu Hiện Đại\n"
-                "- Chuyển dịch toàn diện từ máy chủ truyền thống sang kiến trúc Cloud Serverless\n"
-                "- Tự động mở rộng quy mô, đảm bảo hệ thống vận hành 24/7 với độ trễ cực thấp\n"
-                "- An toàn dữ liệu với cơ chế mã hóa đa tầng và sao lưu dự phòng tự động\n\n"
-                "## Slide 5: Tự Động Hóa Văn Phòng & Robot RPA\n"
-                "- Robot tự động mở phần mềm, soạn thảo văn bản Word và trình chiếu PowerPoint theo lệnh nói/chat\n"
-                "- Giải phóng sức lao động con người khỏi những thao tác lặp đi lặp lại nhàm chán\n"
-                "- Nâng cao độ chính xác tuyệt đối, loại bỏ hoàn toàn sai sót do con người\n\n"
-                "## Slide 6: Khoa Học Dữ Liệu & Phân Tích Thông Minh (Data Science)\n"
-                "- Xử lý hàng triệu bản ghi số liệu bảng tính Excel chỉ trong vài giây\n"
-                "- Trực quan hóa dữ liệu bằng biểu đồ tương tác sắc nét, dễ hiểu\n"
-                "- Dự báo xu hướng kinh doanh và hỗ trợ ra quyết định chuẩn xác\n\n"
-                "## Slide 7: An Ninh Mạng & Bảo Mật Kỷ Nguyên Số (Cybersecurity)\n"
-                "- Phòng chống mã độc, tấn công mạng và rò rỉ dữ liệu nhạy cảm\n"
-                "- Áp dụng chuẩn bảo mật Zero-Trust và xác thực đa yếu tố tiên tiến\n"
-                "- Bảo vệ tài sản số và quyền riêng tư cá nhân của người dùng trên môi trường Internet\n\n"
-                "## Slide 8: Internet Vạn Vật (IoT) & Thành Phố Thông Minh\n"
-                "- Kết nối hàng tỷ thiết bị cảm biến thông minh vào mạng lưới điều khiển tập trung\n"
-                "- Tự động hóa ngôi nhà thông minh (Smart Home) và giao thông đô thị hiện đại\n"
-                "- Tiết kiệm năng lượng và tối ưu hóa tài nguyên sống của cộng đồng\n\n"
-                "## Slide 9: Công Nghệ Chuỗi Khối (Blockchain) & Kinh Tế Số\n"
-                "- Minh bạch hóa giao dịch tài chính với sổ cái phi tập trung bất biến\n"
-                "- Hợp đồng thông minh (Smart Contracts) loại bỏ trung gian tốn kém\n"
-                "- Định hình tương lai thương mại điện tử và định danh số toàn cầu\n\n"
-                "## Slide 10: Giáo Dục Số & Học Tập Trực Tuyến Đột Phá (EdTech)\n"
-                "- Cá nhân hóa lộ trình học tập cho từng học sinh thông qua gia sư AI\n"
-                "- Học liệu số tương tác cao giúp tiếp thu kiến thức nhanh hơn 50%\n"
-                "- Mở rộng cơ hội tiếp cận tri thức đỉnh cao cho mọi người không giới hạn khoảng cách\n\n"
-                "## Slide 11: Năng Lượng Xanh & Phát Triển Bền Vững (Green Tech)\n"
-                "- Ứng dụng AI tối ưu hóa sản xuất năng lượng mặt trời và năng lượng gió\n"
-                "- Giảm thiểu phát thải carbon, bảo vệ môi trường và hệ sinh thái toàn cầu\n"
-                "- Hướng tới nền kinh tế tuần hoàn và tương lai xanh bền vững cho thế hệ mai sau\n\n"
-                "## Slide 12: Tổng Kết & Lời Tri Ân Từ Tác Giả Phan Tấn Kiệt\n"
-                "- Nền tảng AI PTK cam kết không ngừng đổi mới, phụng sự người dùng tận tâm nhất\n"
-                "- Trân trọng cảm ơn quý vị đã theo dõi toàn bộ bài thuyết trình 12 slide đặc biệt này!\n"
-                "- Chúc các bạn luôn gặt hái thành công rực rỡ cùng công nghệ AI PTK!"
-            )
+            base_slug = "ThuyetTrinh_AI_PTK"
+            slides_text = ""
+
+        # ĐẢM BẢO ĐỦ CHÍNH XÁC SỐ LƯỢNG SLIDE NGƯỜI DÙNG YÊU CẦU (VÍ DỤ 20 SLIDE)
+        sections = [s.strip() for s in re.split(r"(?m)^##\s+", slides_text) if s.strip()]
+
+        topic_curated = [
+            "Giới Thiệu Nền Tảng Công Nghệ AI PTK Đột Phá",
+            "Tác Giả Sáng Lập: Phan Tấn Kiệt - Kiến Trúc Sư AI",
+            "Kiến Trúc Đa Não Bộ: Gemini, DeepSeek, OpenAI, Claude",
+            "Hệ Thống Robot Tự Động Hóa RPA Điều Khiển Windows",
+            "Động Cơ Soạn Thảo Văn Bản Microsoft Word Tự Động",
+            "Xử Lý Dữ Liệu Lớn & Quản Lý Bảng Tính Excel Thông Minh",
+            "Thiết Kế Bài Trình Chiếu Đồ Họa Cao Cấp PowerPoint",
+            "Tích Hợp Đa Trình Duyệt: Cốc Cốc, Chrome, Edge Mượt Mà",
+            "Tự Động Kết Nối & Phát Nhạc Đa Phương Tiện YouTube",
+            "Hỏi Đáp Tài Liệu & Cơ Sở Dữ Liệu Tri Thức RAG",
+            "Bảo Mật Đa Tầng Cục Bộ & An Toàn Dữ Liệu Tuyệt Đối",
+            "Khả Năng Xử Lý Tiếng Việt Tự Nhiên & Dịch Lệnh Chuẩn Xác",
+            "Tự Động Nhận Diện Hình Ảnh Đa Phương Thức (Vision AI)",
+            "Tối Ưu Hóa Năng Suất Lao Động Văn Phòng Lên 10 Lần",
+            "Hạ Tầng Điện Toán Đám Mây Serverless Tốc Độ Cao",
+            "Cơ Chế Chống Khóa Tệp Tin & Lưu Bản Quyền Tức Thì",
+            "Học Máy Nâng Cao & Thích Ứng Ngữ Cảnh Thời Gian Thực",
+            "Giải Pháp Chuyển Đổi Số Toàn Diện Cho Doanh Nghiệp",
+            "Chiến Lược Đổi Mới Sáng Tạo & Phát Triển Bền Vững",
+            "Tổng Kết Thành Tựu & Tầm Nhìn Kỷ Nguyên AI PTK",
+        ]
+
+        if len(sections) < req_slides:
+            while len(sections) < req_slides:
+                next_idx = len(sections) + 1
+                subj = topic_curated[(next_idx - 1) % len(topic_curated)]
+                item = (
+                    f"Slide {next_idx}: {subj}\n"
+                    f"- Ứng dụng công nghệ lõi mang tính đột phá và dẫn đầu xu thế\n"
+                    f"- Tối ưu hóa hiệu năng và mang lại trải nghiệm mượt mà tuyệt đối\n"
+                    f"- Phát triển và khẳng định giá trị bền vững cùng nền tảng AI PTK"
+                )
+                sections.append(item)
+
+        final_slides_md = "## " + "\n\n## ".join(sections[:req_slides])
 
         timestamp = now.strftime("%Y%m%d_%H%M%S")
         target_path = self.desktop_dir / f"{base_slug}_{timestamp}.pptx"
 
-        pptx_bytes = ExportService.text_to_pptx(slides_text, title=raw_topic or "BÀI THUYẾT TRÌNH")
+        # Xuất PPTX với chính xác màu sắc và cỡ chữ yêu cầu (ví dụ: đỏ, 30pt)
+        pptx_bytes = ExportService.text_to_pptx(
+            final_slides_md,
+            title=raw_topic or "BÀI THUYẾT TRÌNH",
+            theme_color=req_color,
+            font_size=req_size,
+        )
 
         if pptx_bytes:
             for attempt in range(10):
@@ -359,11 +386,13 @@ class DesktopController:
 
             try:
                 os.startfile(str(target_path))
-                slide_count = slides_text.count("## Slide") or slides_text.count("##")
+                slide_count = len(sections[:req_slides])
+                color_desc = f"màu {req_color.upper()}" if req_color != "auto" else "phối màu chuẩn"
+                size_desc = f", cỡ chữ {req_size}pt" if req_size else ""
                 return {
                     "success": True,
                     "action": "powerpoint_created_and_opened",
-                    "message": f"📊 Đã thiết kế bài thuyết trình PowerPoint ({slide_count} slides) với khung thẻ đẹp, chữ ĐỎ - XANH - VÀNG và chuyển động mượt mà, lưu ra Desktop ({target_path.name}) và mở Microsoft PowerPoint cho bạn!",
+                    "message": f"📊 Đã thiết kế đúng chuẩn {slide_count} slides ({color_desc}{size_desc}) kèm hiệu ứng chuyển động, lưu ra Desktop ({target_path.name}) và mở Microsoft PowerPoint cho bạn!",
                     "file_path": str(target_path),
                 }
             except Exception as e:
