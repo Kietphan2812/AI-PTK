@@ -1,6 +1,7 @@
 """
 Cấu hình ứng dụng AI PTK (Application Configuration)
 =====================================================
+Hỗ trợ đa nền tảng AI: Google Gemini, DeepSeek, OpenAI ChatGPT, Anthropic Claude.
 Đọc biến môi trường từ file .env ở thư mục gốc hoặc từ Streamlit Cloud secrets.
 """
 
@@ -22,10 +23,12 @@ if env_path.exists():
 
 
 class Settings:
-    """Lớp cấu hình chính."""
+    """Lớp cấu hình chính cho toàn bộ các nhà cung cấp AI."""
 
-    _gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
-    GEMINI_MODEL: str = "gemini-3.5-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
+    DEEPSEEK_MODEL: str = "deepseek-chat"
+    OPENAI_MODEL: str = "gpt-4o"
+    CLAUDE_MODEL: str = "claude-3-5-sonnet-20241022"
 
     # Thư mục lưu trữ
     UPLOAD_DIR: Path = BACKEND_DIR / "uploads"
@@ -33,26 +36,41 @@ class Settings:
 
     # App info
     APP_TITLE: str = "AI PTK – Bộ công cụ AI đa năng"
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str = "2.0.0"
 
-    @property
-    def GEMINI_API_KEY(self) -> str:
-        key = os.getenv("GEMINI_API_KEY", "")
-        if not key or key == "your_gemini_api_key_here":
+    def _get_key(self, env_name: str) -> str:
+        key = os.getenv(env_name, "")
+        if not key or "your_" in key:
             try:
                 import streamlit as st
-                if hasattr(st, "secrets") and "GEMINI_API_KEY" in st.secrets:
-                    key = str(st.secrets["GEMINI_API_KEY"])
+                if hasattr(st, "secrets") and env_name in st.secrets:
+                    key = str(st.secrets[env_name])
             except Exception:
                 pass
         return key
 
+    @property
+    def GEMINI_API_KEY(self) -> str:
+        return self._get_key("GEMINI_API_KEY")
+
+    @property
+    def DEEPSEEK_API_KEY(self) -> str:
+        return self._get_key("DEEPSEEK_API_KEY")
+
+    @property
+    def OPENAI_API_KEY(self) -> str:
+        return self._get_key("OPENAI_API_KEY")
+
+    @property
+    def ANTHROPIC_API_KEY(self) -> str:
+        return self._get_key("ANTHROPIC_API_KEY")
+
     def validate(self) -> None:
-        """Kiểm tra cấu hình bắt buộc."""
-        if not self.GEMINI_API_KEY or self.GEMINI_API_KEY == "your_gemini_api_key_here":
+        """Kiểm tra có ít nhất 1 API key được cấu hình."""
+        if not any([self.GEMINI_API_KEY, self.DEEPSEEK_API_KEY, self.OPENAI_API_KEY, self.ANTHROPIC_API_KEY]):
             raise ValueError(
-                "GEMINI_API_KEY chưa được cấu hình. "
-                "Hãy cấu hình trong file .env hoặc trong Streamlit Secrets."
+                "Chưa cấu hình API Key nào (Gemini, DeepSeek, OpenAI hoặc Claude). "
+                "Hãy điền ít nhất 1 key trong file .env hoặc trong Streamlit Secrets."
             )
 
 
