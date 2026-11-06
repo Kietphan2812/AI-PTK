@@ -10,6 +10,8 @@ import datetime
 import subprocess
 import json
 import re
+import urllib.request
+import urllib.parse
 from pathlib import Path
 
 try:
@@ -36,27 +38,31 @@ class DesktopController:
         """Nhận lệnh tiếng Việt của người dùng và tự động thực thi trên máy tính."""
         cmd_lower = user_command.lower().strip()
 
-        # 1. NHẬN DIỆN LỆNH NOTEPAD / GHI CHÚ
-        if any(w in cmd_lower for w in ["notepad", "sổ tay", "ghi chú", "note"]):
+        # 1. NHẬN DIỆN LỆNH YOUTUBE / PHÁT NHẠC / XEM VIDEO (Ưu tiên cao nhất)
+        if any(w in cmd_lower for w in ["youtube", "bài nhạc", "bài hát", "phát nhạc", "bật nhạc", "nghe nhạc", "phát bài", "remix", "rimex", "mv", "video"]):
+            return self._handle_youtube_command(user_command)
+
+        # 2. NHẬN DIỆN LỆNH NOTEPAD / GHI CHÚ
+        elif any(w in cmd_lower for w in ["notepad", "sổ tay", "ghi chú", "note"]):
             return self._handle_notepad_command(user_command)
 
-        # 2. NHẬN DIỆN LỆNH WORD (Mở Word, gõ nội dung, lưu file)
+        # 3. NHẬN DIỆN LỆNH WORD (Mở Word, gõ nội dung, lưu file)
         elif any(w in cmd_lower for w in ["word", "văn bản", "soạn thảo", "đơn", "tài liệu"]):
             return self._handle_word_command(user_command)
 
-        # 3. NHẬN DIỆN LỆNH EXCEL (Mở Excel, tạo bảng tính, lưu file)
+        # 4. NHẬN DIỆN LỆNH EXCEL (Mở Excel, tạo bảng tính, lưu file)
         elif any(w in cmd_lower for w in ["excel", "bảng tính", "bảng số liệu", "thu chi"]):
             return self._handle_excel_command(user_command)
 
-        # 4. NHẬN DIỆN LỆNH CHROME / TRÌNH DUYỆT (Mở web, tìm kiếm Google, Youtube)
-        elif any(w in cmd_lower for w in ["chrome", "web", "tìm kiếm", "google", "youtube", "tra cứu"]):
+        # 5. NHẬN DIỆN LỆNH CHROME / TRÌNH DUYỆT (Mở web, tìm kiếm Google)
+        elif any(w in cmd_lower for w in ["chrome", "web", "tìm kiếm", "google", "tra cứu", "lên mạng"]):
             return self._handle_browser_command(user_command)
 
-        # 5. NHẬN DIỆN LỆNH MỞ PHẦN MỀM THÔNG DỤNG
+        # 6. NHẬN DIỆN LỆNH MỞ PHẦN MỀM THÔNG DỤNG
         elif any(w in cmd_lower for w in ["mở", "bật", "khởi động"]):
             return self._handle_open_app_command(user_command)
 
-        # 6. LỆNH TỰ DO: DÙNG AI PHÂN TÍCH Ý ĐỊNH VÀ THỰC THI
+        # 7. LỆNH TỰ DO: DÙNG AI PHÂN TÍCH Ý ĐỊNH VÀ THỰC THI
         else:
             return self._handle_ai_dynamic_action(user_command)
 
@@ -74,6 +80,84 @@ class DesktopController:
         ).strip()
         return cleaned
 
+    def _handle_youtube_command(self, command: str) -> dict:
+        """Xử lý tác vụ: Mở YouTube, tìm kiếm bài hát/video và TỰ ĐỘNG PHÁT BÀI NHẠC trực tiếp."""
+        # 1. Trích xuất tên bài hát/nội dung
+        ai_query = ""
+        try:
+            p = (
+                f"Người dùng ra lệnh điều khiển máy tính: '{command}'.\n"
+                "Hãy trích xuất TÊN BÀI HÁT / THỂ LOẠI NHẠC / NỘI DUNG YOUTUBE mà người dùng muốn nghe (ví dụ: 'nhạc remix', 'Sơn Tùng M-TP', 'nhạc trẻ remix').\n"
+                "Chỉ trả về cụm từ tìm kiếm ngắn gọn, không giải thích."
+            )
+            ai_query = self.ai.generate(prompt=p).strip()
+            ai_query = re.sub(r'["\']', '', ai_query).strip()
+            if len(ai_query) > 50 or "Chưa cấu hình" in ai_query or "\n" in ai_query:
+                ai_query = ""
+        except Exception:
+            ai_query = ""
+
+        if not ai_query:
+            c = command.lower()
+            drop_phrases = [
+                "mở gg chrome", "mở google chrome", "mở chrome", "mở trình duyệt",
+                "tim youtube..com", "tìm youtube..com", "vào youtube..com", "youtube..com",
+                "tim youtube.com", "tìm youtube.com", "vào youtube.com", "youtube.com",
+                "tim youtube", "tìm youtube", "vào youtube", "lên youtube", "youtube",
+                "rồi tìm 1 bài nhạc", "rồi tìm bài nhạc", "rồi tìm 1 bài", "rồi tìm bài", "rồi tìm",
+                "tìm 1 bài nhạc", "tìm bài nhạc", "tìm 1 bài", "tìm bài", "tìm kiếm", "tìm",
+                "bấm vô phát bài nhạc luôn", "bấm vô phát bài luôn", "bấm phát bài nhạc luôn",
+                "bấm vô phát luôn", "bấm phát luôn", "phát bài nhạc luôn", "phát bài hát luôn",
+                "phát nhạc luôn", "phát luôn", "nghe luôn", "bật bài nhạc", "bật bài hát",
+                "bật nhạc", "nghe nhạc", "phát bài", "phát", "bật", "nghe", "xem",
+                "luôn nhé", "luôn nha", "luôn đi", "nhé", "nha", "đi", "luôn",
+                "bấm vô", "bấm vào", "click vào"
+            ]
+            for p in drop_phrases:
+                c = c.replace(p, " ")
+            c = re.sub(r"\s+", " ", c).strip()
+            c = c.replace("rimex", "remix")
+            ai_query = c or "nhạc remix"
+
+        # 2. Tìm ID video trên YouTube để PHÁT NGAY LẬP TỨC
+        enc = urllib.parse.quote(ai_query)
+        search_url = f"https://www.youtube.com/results?search_query={enc}"
+        target_url = search_url
+        video_found = False
+
+        try:
+            req = urllib.request.Request(
+                search_url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                html = resp.read().decode("utf-8")
+            vids = re.findall(r'watch\?v=([a-zA-Z0-9_-]{11})', html)
+            if vids:
+                target_url = f"https://www.youtube.com/watch?v={vids[0]}"
+                video_found = True
+        except Exception:
+            pass
+
+        # 3. Mở Google Chrome hoặc trình duyệt mặc định với video đó
+        try:
+            subprocess.Popen(f'start chrome "{target_url}"', shell=True)
+        except Exception:
+            subprocess.Popen(f'start "" "{target_url}"', shell=True)
+
+        if video_found:
+            msg = f"🎵 Đã tự động mở YouTube và ĐANG PHÁT BÀI NHẠC: '{ai_query}' ngay lập tức cho bạn!"
+        else:
+            msg = f"🎵 Đã tự động mở YouTube tìm kiếm bài nhạc: '{ai_query}'!"
+
+        return {
+            "success": True,
+            "action": "youtube_played",
+            "message": msg,
+            "url": target_url,
+            "query": ai_query
+        }
+
     def _handle_word_command(self, command: str) -> dict:
         """Xử lý tác vụ: Mở Word, soạn nội dung chi tiết theo lệnh người dùng và tự lưu file ra Desktop."""
         now = datetime.datetime.now()
@@ -84,7 +168,7 @@ class DesktopController:
             f"Người dùng ra lệnh điều khiển máy tính: '{command}'.\n"
             f"Thời gian hiện tại: {now_str}.\n"
             "Hãy hoàn thành CHÍNH XÁC mọi yêu cầu người dùng đặt ra trong lệnh trên:\n"
-            "- Nếu người dùng ghi rõ từ khóa/câu chữ (ví dụ: 'Chào Kiệt', 'thêm 3333', 'ngày tháng'), BẮT BUỘC phải đưa đầy đủ các thông tin đó vào văn bản.\n"
+            "- Nếu người dùng ghi rõ từ khóa/câu chữ (ví dụ: 'Chào Kiệt', 'thêm 3333', 'ngày tháng', 'ghi tên Kiệt 100 lần'), BẮT BUỘC phải đưa đầy đủ các thông tin đó vào văn bản.\n"
             "- Hãy trình bày văn bản chuẩn đẹp theo định dạng Markdown (Tiêu đề, lời chào, các đoạn văn, ngày tháng nếu có yêu cầu, bảng biểu nếu cần).\n"
             "- Dòng cuối cùng ghi: FILENAME: <tên_file_ngắn_gọn_không_dấu.docx>\n"
             "Viết trực tiếp nội dung văn bản ngay lập tức, không giải thích bên ngoài."
@@ -104,9 +188,7 @@ class DesktopController:
         )
 
         if is_ai_valid:
-            # Lọc bỏ dòng ghi chú cuối nếu có
             content_to_write = re.sub(r"👉\s*Bạn có thể bấm nút.*?$", "", ai_reply, flags=re.DOTALL).strip()
-            # Tìm tên file do AI gợi ý
             fname_m = re.search(r"FILENAME:\s*([^\s\n]+\.docx)", content_to_write, re.IGNORECASE)
             if fname_m:
                 base_slug = Path(fname_m.group(1)).stem
@@ -114,7 +196,6 @@ class DesktopController:
             else:
                 base_slug = "TaiLieu_AI_PTK"
         else:
-            # Xử lý offline thông minh: trích xuất chính xác những gì người dùng yêu cầu
             raw_content = self._clean_command_content(
                 command,
                 ["mở phần mềm word", "mở word", "vào word", "soạn thảo", "viết vào word", "ghi vào word", "tạo file word", "mở file word"]
@@ -134,14 +215,11 @@ class DesktopController:
             slug_words = re.findall(r"[a-zA-Z0-9]+", raw_content)
             base_slug = "_".join(slug_words[:3]) if slug_words else "VanBan"
 
-        # Đảm bảo tên file luôn có timestamp để KHÔNG BAO GIỜ bị lỗi 'Permission denied' do file cũ đang mở
         timestamp = now.strftime("%Y%m%d_%H%M%S")
         target_path = self.desktop_dir / f"{base_slug}_{timestamp}.docx"
 
-        # Tạo file Word bằng ExportService
         docx_bytes = ExportService.text_to_docx(content_to_write, title="TÀI LIỆU AI PTK")
 
-        # Cơ chế chống khóa file thông minh
         for attempt in range(10):
             try:
                 with open(target_path, "wb") as f:
@@ -150,7 +228,6 @@ class DesktopController:
             except PermissionError:
                 target_path = self.desktop_dir / f"{base_slug}_{timestamp}_{attempt+1}.docx"
 
-        # Mở ứng dụng Microsoft Word hiển thị ngay trước mắt người dùng
         try:
             os.startfile(str(target_path))
             preview_snippet = content_to_write.replace("#", "").strip()[:80].replace("\n", " ")
@@ -269,23 +346,66 @@ class DesktopController:
             return {"success": False, "message": f"Lỗi mở Notepad: {e}"}
 
     def _handle_browser_command(self, command: str) -> dict:
-        """Tự động mở trình duyệt Chrome và tìm kiếm thông tin."""
-        search_query = re.sub(r"^(mở chrome|tìm kiếm|tra cứu|tìm|mở web)\s*", "", command, flags=re.IGNORECASE).strip()
-        if not search_query:
+        """Tự động mở trình duyệt Chrome, trang web cụ thể hoặc tìm kiếm Google."""
+        cmd_l = command.lower()
+
+        # Kiểm tra các trang web phổ biến
+        direct_sites = {
+            "facebook": "https://www.facebook.com",
+            "fb": "https://www.facebook.com",
+            "tiktok": "https://www.tiktok.com",
+            "shopee": "https://shopee.vn",
+            "lazada": "https://lazada.vn",
+            "chatgpt": "https://chatgpt.com",
+            "gemini": "https://gemini.google.com",
+            "vnexpress": "https://vnexpress.net",
+            "dantri": "https://dantri.com.vn",
+            "canva": "https://www.canva.com",
+            "zalo": "https://chat.zalo.me",
+            "gmail": "https://mail.google.com",
+            "drive": "https://drive.google.com",
+            "github": "https://github.com",
+        }
+        for site_key, site_url in direct_sites.items():
+            if site_key in cmd_l:
+                try:
+                    subprocess.Popen(f'start chrome "{site_url}"', shell=True)
+                except Exception:
+                    subprocess.Popen(f'start "" "{site_url}"', shell=True)
+                return {
+                    "success": True,
+                    "action": "website_opened",
+                    "message": f"🌐 Đã tự động mở trang web {site_key.title()}: {site_url}",
+                    "url": site_url,
+                }
+
+        # Trích xuất từ khóa tìm kiếm Google
+        clean_kw = command
+        for prefix in [
+            "mở gg chrome", "mở google chrome", "mở chrome", "mở web", "mở trình duyệt",
+            "tìm kiếm trên google", "tìm kiếm google", "tìm trên google",
+            "tìm kiếm", "tra cứu", "tìm", "lên mạng tìm"
+        ]:
+            clean_kw = re.sub(prefix, "", clean_kw, flags=re.IGNORECASE)
+        clean_kw = re.sub(r"^(và|hãy|giúp tôi|hộ tôi)?\s*", "", clean_kw, flags=re.IGNORECASE).strip()
+
+        if not clean_kw:
             url = "https://www.google.com"
             msg = "Đã tự động mở trình duyệt Google Chrome!"
-        elif search_query.startswith("http"):
-            url = search_query
+        elif clean_kw.startswith("http"):
+            url = clean_kw
             msg = f"Đã tự động mở trang web: {url}"
         else:
-            url = f"https://www.google.com/search?q={search_query.replace(' ', '+')}"
-            msg = f"Đã tự động mở Chrome và tìm kiếm: '{search_query}'!"
+            enc = urllib.parse.quote(clean_kw)
+            url = f"https://www.google.com/search?q={enc}"
+            msg = f"🔍 Đã mở Google Chrome và tìm kiếm: '{clean_kw}'!"
 
         try:
+            subprocess.Popen(f'start chrome "{url}"', shell=True)
+        except Exception:
             subprocess.Popen(f'start "" "{url}"', shell=True)
-            return {"success": True, "action": "browser_opened", "message": msg, "url": url}
-        except Exception as e:
-            return {"success": False, "action": "browser_error", "message": f"Lỗi mở trình duyệt: {e}"}
+
+        return {"success": True, "action": "browser_opened", "message": msg, "url": url}
 
     def _handle_open_app_command(self, command: str) -> dict:
         """Tự động mở phần mềm máy tính (Notepad, Calculator, Word, Excel, Explorer...)."""
@@ -308,7 +428,6 @@ class DesktopController:
                 except Exception as e:
                     return {"success": False, "action": "launch_error", "message": f"Không thể bật {disp_name}: {e}"}
 
-        # Nếu không nhận diện được app cụ thể, dùng AI dịch lệnh
         return self._handle_ai_dynamic_action(command)
 
     def _handle_ai_dynamic_action(self, command: str) -> dict:

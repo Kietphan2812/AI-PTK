@@ -124,12 +124,12 @@ class DesktopAgentGUI:
         preset_frame.pack(fill=tk.X, padx=16, pady=10)
 
         grid_presets = [
-            ("📝 Mở Word gõ 'Chào Kiệt nhé' & Lưu", "Mở Word ghi Chào Kiệt nhé rồi lưu lại"),
+            ("🎵 Mở YouTube PHÁT NHẠC REMIX", "Mở YouTube tìm bài nhạc remix bấm phát luôn"),
+            ("📝 Mở Word soạn bài viết theo yêu cầu", "Mở Word ghi tên Kiệt 100 lần rồi lưu lại"),
             ("📊 Mở Excel tạo Bảng Quản Lý Chi Tiêu", "Mở Excel tạo bảng quản lý thu chi cá nhân 1 tháng"),
-            ("🌐 Mở Google Chrome tìm giá vàng", "Mở Chrome tìm kiếm giá vàng hôm nay"),
+            ("🌐 Mở Google Chrome tìm kiếm giá vàng", "Mở Chrome tìm kiếm giá vàng hôm nay"),
             ("🧮 Bật Máy Tính (Calculator)", "Mở máy tính calculator"),
             ("📁 Mở Màn Hình Desktop", "Mở thư mục desktop"),
-            ("📑 Mở Word Soạn Hợp Đồng Thuê Nhà", "Mở Word soạn thảo hợp đồng thuê nhà đầy đủ các điều khoản và lưu lại"),
         ]
 
         for idx, (label, cmd_text) in enumerate(grid_presets):
