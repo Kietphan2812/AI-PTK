@@ -64,26 +64,11 @@ with col2:
         else:
             with st.spinner("AI đang soạn thảo nội dung..."):
                 try:
-                    res = requests.post(
-                        f"{API_URL}/api/writer/generate",
-                        json={
-                            "task_type": task_type,
-                            "topic": topic,
-                            "tone": tone,
-                            "language": language,
-                            "extra_instructions": extra_instructions,
-                        },
-                        timeout=90,
-                    )
-                    if res.status_code == 200:
-                        content = res.json().get("content", "")
-                        st.markdown(content)
-
-                        # Nút sao chép nội dung
-                        st.write("---")
-                        st.text_area("Bản raw để copy:", value=content, height=150)
-                    else:
-                        st.error(f"Lỗi: {res.json().get('detail')}")
+                    from service_bridge import call_writer
+                    content = call_writer(task_type, topic, tone, language, extra_instructions)
+                    st.markdown(content)
+                    st.write("---")
+                    st.text_area("Bản raw để copy:", value=content, height=150)
                 except Exception as e:
                     st.error(f"Lỗi tạo nội dung: {str(e)}")
     else:

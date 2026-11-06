@@ -41,10 +41,10 @@ with tab_trans:
         if text_to_translate.strip():
             with st.spinner("Đang biên dịch..."):
                 try:
-                    res = requests.post(f"{API_URL}/api/tools/process", json={"tool_type": "translate", "text": text_to_translate, "target_language": target_lang})
-                    if res.status_code == 200:
-                        st.markdown("### Kết quả bản dịch:")
-                        st.markdown(res.json().get("result"))
+                    from service_bridge import call_tools_process
+                    res_text = call_tools_process("translate", text_to_translate, target_lang, "")
+                    st.markdown("### Kết quả bản dịch:")
+                    st.markdown(res_text)
                 except Exception as e:
                     st.error(f"Lỗi: {e}")
 
@@ -61,10 +61,10 @@ with tab_codegen:
         if code_desc.strip():
             with st.spinner("AI đang tạo mã nguồn..."):
                 try:
-                    res = requests.post(f"{API_URL}/api/tools/process", json={"tool_type": "code_generate", "text": code_desc, "programming_language": code_lang})
-                    if res.status_code == 200:
-                        st.markdown("### Mã nguồn được tạo:")
-                        st.markdown(res.json().get("result"))
+                    from service_bridge import call_tools_process
+                    res_text = call_tools_process("code_generate", code_desc, "", code_lang)
+                    st.markdown("### Mã nguồn được tạo:")
+                    st.markdown(res_text)
                 except Exception as e:
                     st.error(f"Lỗi: {e}")
 
@@ -76,9 +76,9 @@ with tab_explain:
         if code_input.strip():
             with st.spinner("Đang phân tích code..."):
                 try:
-                    res = requests.post(f"{API_URL}/api/tools/process", json={"tool_type": "code_explain", "text": code_input})
-                    if res.status_code == 200:
-                        st.markdown(res.json().get("result"))
+                    from service_bridge import call_tools_process
+                    res_text = call_tools_process("code_explain", code_input)
+                    st.markdown(res_text)
                 except Exception as e:
                     st.error(f"Lỗi: {e}")
 
@@ -90,9 +90,9 @@ with tab_sum:
         if text_to_sum.strip():
             with st.spinner("Đang chắt lọc ý chính..."):
                 try:
-                    res = requests.post(f"{API_URL}/api/tools/process", json={"tool_type": "summarize", "text": text_to_sum})
-                    if res.status_code == 200:
-                        st.markdown(res.json().get("result"))
+                    from service_bridge import call_tools_process
+                    res_text = call_tools_process("summarize", text_to_sum)
+                    st.markdown(res_text)
                 except Exception as e:
                     st.error(f"Lỗi: {e}")
 
@@ -104,9 +104,10 @@ with tab_grammar:
         if text_grammar.strip():
             with st.spinner("Đang rà soát lỗi..."):
                 try:
-                    res = requests.post(f"{API_URL}/api/tools/process", json={"tool_type": "grammar_fix", "text": text_grammar})
-                    if res.status_code == 200:
-                        st.markdown(res.json().get("result"))
+                    from service_bridge import call_tools_process
+                    res_text = call_tools_process("grammar_fix", text_grammar)
+                    st.markdown(res_text)
                 except Exception as e:
+                    st.error(f"Lỗi: {e}")
                     st.error(f"Lỗi: {e}")
 

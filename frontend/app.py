@@ -95,20 +95,15 @@ with st.sidebar:
     st.title("AI PTK v1.0")
     st.write("---")
 
-    # Kiểm tra Backend
+    # Kiểm tra Backend / Mode
     try:
-        res = requests.get(f"{API_URL}/api/health", timeout=2)
-        if res.status_code == 200:
-            health = res.json()
-            st.success("🟢 Backend: Đang kết nối")
-            st.caption(f"Model: `{health.get('model')}`")
-            if not health.get("api_key_configured"):
-                st.warning("⚠️ Chưa điền `GEMINI_API_KEY` trong file `.env`!")
+        from service_bridge import is_backend_online
+        if is_backend_online():
+            st.success("🟢 Trạng thái: Kết nối Backend API")
         else:
-            st.warning("🟡 Backend không phản hồi chuẩn")
+            st.success("🟢 Trạng thái: Chế độ Độc lập (Cloud / Standalone)")
     except Exception:
-        st.error("🔴 Không thể kết nối Backend!")
-        st.caption("Hãy mở terminal và chạy: `cd backend && uvicorn main:app --reload`")
+        st.success("🟢 Trạng thái: Sẵn sàng hoạt động")
 
     st.write("---")
     st.info("👈 **Chọn tính năng ở thanh menu bên trái** để bắt đầu trải nghiệm.")

@@ -27,40 +27,36 @@ if uploaded_csv is not None:
     if st.button("📈 Bắt đầu phân tích dữ liệu", type="primary", use_container_width=True):
         with st.spinner("Đang tính toán thống kê và chạy mô hình phân tích..."):
             try:
-                files = {"file": (uploaded_csv.name, uploaded_csv.getvalue(), "text/csv")}
-                res = requests.post(f"{API_URL}/api/data/analyze", files=files, timeout=90)
-                if res.status_code == 200:
-                    data = res.json()
+                from service_bridge import call_data_analyze
+                data = call_data_analyze(uploaded_csv.name, uploaded_csv.getvalue())
 
-                    # Metrics
-                    c1, c2, c3 = st.columns(3)
-                    c1.metric("Tổng số dòng dữ liệu", f"{data.get('row_count'):,}")
-                    c2.metric("Tổng số cột", len(data.get("columns", [])))
-                    c3.metric("Trạng thái", "Phân tích hoàn tất")
+                # Metrics
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Tổng số dòng dữ liệu", f"{data.get('row_count'):,}")
+                c2.metric("Tổng số cột", len(data.get("columns", [])))
+                c3.metric("Trạng thái", "Phân tích hoàn tất")
 
-                    st.write("---")
+                st.write("---")
 
-                    # Tabs hiển thị
-                    tab1, tab2, tab3 = st.tabs(["🤖 Báo Cáo AI Insights", "📈 Biểu Đồ Trực Quan", "📋 Thống Kê Chi Tiết"])
+                # Tabs hiển thị
+                tab1, tab2, tab3 = st.tabs(["🤖 Báo Cáo AI Insights", "📈 Biểu Đồ Trực Quan", "📋 Thống Kê Chi Tiết"])
 
-                    with tab1:
-                        st.markdown("### 💡 Đánh giá & Phát hiện từ AI:")
-                        st.markdown(data.get("ai_insights", ""))
+                with tab1:
+                    st.markdown("### 💡 Đánh giá & Phát hiện từ AI:")
+                    st.markdown(data.get("ai_insights", ""))
 
-                    with tab2:
-                        st.markdown("### 📊 Trực quan hoá biểu đồ:")
-                        chart_html = data.get("chart_html", "")
-                        if chart_html:
-                            components.html(chart_html, height=520, scrolling=True)
-                        else:
-                            st.info("Không có biểu đồ phù hợp được sinh ra.")
+                with tab2:
+                    st.markdown("### 📊 Trực quan hoá biểu đồ:")
+                    chart_html = data.get("chart_html", "")
+                    if chart_html:
+                        components.html(chart_html, height=520, scrolling=True)
+                    else:
+                        st.info("Không có biểu đồ phù hợp được sinh ra.")
 
-                    with tab3:
-                        st.markdown("### 📋 Thông tin thống kê mô tả:")
-                        st.text(data.get("summary", ""))
+                with tab3:
+                    st.markdown("### 📋 Thông tin thống kê mô tả:")
+                    st.text(data.get("summary", ""))
 
-                else:
-                    st.error(f"Lỗi: {res.json().get('detail')}")
             except Exception as e:
                 st.error(f"Lỗi phân tích: {str(e)}")
 else:

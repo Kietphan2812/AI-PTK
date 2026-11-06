@@ -45,26 +45,15 @@ if user_prompt := st.chat_input("Nhập câu hỏi của bạn tại đây..."):
     # Đưa vào history
     st.session_state.chat_history.append({"role": "user", "parts": user_prompt})
 
-    # Gọi API Backend
+    # Xử lý chat qua Service Bridge
     with st.chat_message("assistant"):
         with st.spinner("AI đang suy nghĩ..."):
             try:
-                # Gửi toàn bộ history trước đó (ngoại trừ tin nhắn hiện tại)
+                from service_bridge import call_chat
                 history_payload = st.session_state.chat_history[:-1]
-                response = requests.post(
-                    f"{API_URL}/api/chat",
-                    json={"message": user_prompt, "history": history_payload},
-                    timeout=60,
-                )
-                if response.status_code == 200:
-                    reply = response.json().get("response", "")
-                    st.markdown(reply)
-                    st.session_state.chat_history.append({"role": "model", "parts": reply})
-                else:
-                    err_msg = response.json().get("detail", "Lỗi từ máy chủ.")
-                    st.error(f"⚠️ {err_msg}")
-            except requests.exceptions.ConnectionError:
-                st.error("🔴 Không thể kết nối tới Backend (http://localhost:8000). Hãy kiểm tra xem server đã khởi động chưa.")
+                reply = call_chat(user_prompt, history_payload)
+                st.markdown(reply)
+                st.session_state.chat_history.append({"role": "model", "parts": reply})
             except Exception as e:
                 st.error(f"Lỗi: {str(e)}")
 

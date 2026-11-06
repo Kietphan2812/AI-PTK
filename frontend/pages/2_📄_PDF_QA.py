@@ -30,16 +30,12 @@ with col1:
         if st.button("🚀 Bắt đầu lập chỉ mục tài liệu", use_container_width=True, type="primary"):
             with st.spinner("Đang trích xuất văn bản và phân mảnh vào ChromaDB..."):
                 try:
-                    files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")}
-                    res = requests.post(f"{API_URL}/api/rag/upload", files=files, timeout=120)
-                    if res.status_code == 200:
-                        data = res.json()
-                        st.success(f"✅ {data.get('message')}")
-                        st.info(f"📁 Tên tài liệu: `{data.get('filename')}` | 🔢 Số đoạn phân mảnh: `{data.get('chunks')}`")
-                    else:
-                        st.error(f"Lỗi: {res.json().get('detail')}")
+                    from service_bridge import call_rag_upload
+                    data = call_rag_upload(uploaded_file.name, uploaded_file.getvalue())
+                    st.success(f"✅ {data.get('message')}")
+                    st.info(f"📁 Tên tài liệu: `{data.get('filename')}` | 🔢 Số đoạn phân mảnh: `{data.get('chunks')}`")
                 except Exception as e:
-                    st.error(f"Lỗi kết nối: {str(e)}")
+                    st.error(f"Lỗi: {str(e)}")
 
 with col2:
     st.subheader("🔍 2. Đặt câu hỏi trên tài liệu")
@@ -47,9 +43,8 @@ with col2:
     # Lấy danh sách tài liệu hiện có
     doc_list = []
     try:
-        r = requests.get(f"{API_URL}/api/rag/documents", timeout=5)
-        if r.status_code == 200:
-            doc_list = r.json().get("documents", [])
+        from service_bridge import call_rag_list
+        doc_list = call_rag_list()
     except Exception:
         pass
 
@@ -63,11 +58,8 @@ with col2:
             else:
                 with st.spinner("Đang tìm kiếm ngữ cảnh phù hợp và sinh câu trả lời..."):
                     try:
-                        res = requests.post(
-                            f"{API_URL}/api/rag/query",
-                            json={"query": question, "filename": selected_doc},
-                            timeout=60,
-                        )
+                        from service_bridge import call_rag_query
+                        ans_data = call_rag_query(question, selected_doc)
                         if res.status_code == 200:
                             ans_data = res.json()
                             st.markdown("### 💡 Câu trả lời từ AI:")
