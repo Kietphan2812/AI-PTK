@@ -431,3 +431,72 @@ class ExportService:
         headers = [str(c) for c in df.columns]
         rows = df.values.tolist()
         return cls._pure_python_xlsx(headers, rows, sheet_name=title[:30])
+
+    @classmethod
+    def text_to_pptx(cls, markdown_or_slides_text: str, title: str = "BÀI THUYẾT TRÌNH AI PTK") -> bytes:
+        """Tạo bài thuyết trình PowerPoint (.pptx) chuẩn và chuyên nghiệp từ văn bản/markdown."""
+        try:
+            from pptx import Presentation
+            from pptx.util import Inches, Pt
+            from pptx.dml.color import RGBColor
+
+            prs = Presentation()
+            prs.slide_width = Inches(13.333)
+            prs.slide_height = Inches(7.5)
+
+            # Slide 1: Bìa (Title Slide)
+            slide_layout = prs.slide_layouts[0]
+            slide = prs.slides.add_slide(slide_layout)
+            t_box = slide.shapes.title
+            s_box = slide.placeholders[1]
+            t_box.text = title.upper()
+            s_box.text = f"Được tạo tự động bởi AI PTK (Phan Tấn Kiệt) | {datetime.datetime.now().strftime('%d/%m/%Y')}"
+
+            # Tách các slide theo ## Slide hoặc ## Tiêu đề
+            sections = re.split(r"(?m)^##\s+", markdown_or_slides_text)
+            bullet_layout = prs.slide_layouts[1]
+
+            for sec in sections:
+                sec_text = sec.strip()
+                if not sec_text or sec_text == title:
+                    continue
+                lines = [l.strip() for l in sec_text.splitlines() if l.strip()]
+                if not lines:
+                    continue
+
+                slide_title = lines[0].replace("#", "").strip()
+                content_lines = lines[1:]
+
+                slide_item = prs.slides.add_slide(bullet_layout)
+                slide_item.shapes.title.text = slide_title
+                tf = slide_item.placeholders[1].text_frame
+                tf.word_wrap = True
+
+                first = True
+                for cl in content_lines:
+                    if cl.startswith("### "):
+                        p = tf.paragraphs[0] if first else tf.add_paragraph()
+                        p.text = cl[4:].strip()
+                        p.font.bold = True
+                        p.level = 0
+                        first = False
+                    elif cl.startswith(("- ", "* ", "• ")):
+                        p = tf.paragraphs[0] if first else tf.add_paragraph()
+                        p.text = cl.lstrip("-*• ").strip()
+                        p.level = 1
+                        first = False
+                    elif cl.startswith("|") and cl.endswith("|"):
+                        continue
+                    else:
+                        p = tf.paragraphs[0] if first else tf.add_paragraph()
+                        p.text = cl
+                        p.level = 0
+                        first = False
+
+            buf = io.BytesIO()
+            prs.save(buf)
+            return buf.getvalue()
+        except Exception as e:
+            print(f"[ExportService] Lỗi tạo pptx: {e}")
+            return b""
+

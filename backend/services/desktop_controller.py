@@ -1,6 +1,8 @@
 """
 Desktop Controller - Hệ thống điều phối Robot tự động hóa máy tính Windows (RPA & PC Control)
 Chuyên trách dịch lệnh tiếng Việt thành các hành động điều khiển chuột, bàn phím, phần mềm và tập tin.
+Hỗ trợ đa trình duyệt: Cốc Cốc, Google Chrome, Microsoft Edge, Firefox, Brave, Opera.
+Hỗ trợ đa ứng dụng: Microsoft Word (.docx), Excel (.xlsx), PowerPoint (.pptx), Notepad (.txt), Calculator...
 """
 
 import os
@@ -27,7 +29,7 @@ from services.ai_service import AIService
 
 
 class DesktopController:
-    """Bộ điều khiển máy tính thông minh tích hợp trí tuệ nhân tạo."""
+    """Bộ điều khiển máy tính thông minh tích hợp trí tuệ nhân tạo toàn diện."""
 
     def __init__(self, ai_service: AIService = None):
         self.ai = ai_service or AIService()
@@ -38,42 +40,122 @@ class DesktopController:
         """Nhận lệnh tiếng Việt của người dùng và tự động thực thi trên máy tính."""
         cmd_lower = user_command.lower().strip()
 
-        # 1. NHẬN DIỆN LỆNH YOUTUBE / PHÁT NHẠC / XEM VIDEO (Ưu tiên cao nhất)
+        # 1. NHẬN DIỆN LỆNH YOUTUBE / PHÁT NHẠC / XEM VIDEO
         if any(w in cmd_lower for w in ["youtube", "bài nhạc", "bài hát", "phát nhạc", "bật nhạc", "nghe nhạc", "phát bài", "remix", "rimex", "mv", "video"]):
             return self._handle_youtube_command(user_command)
 
-        # 2. NHẬN DIỆN LỆNH NOTEPAD / GHI CHÚ
-        elif any(w in cmd_lower for w in ["notepad", "sổ tay", "ghi chú", "note"]):
-            return self._handle_notepad_command(user_command)
+        # 2. NHẬN DIỆN LỆNH POWERPOINT (PPT, PPTX, bài thuyết trình, slide, đề tài thuyết trình)
+        elif any(w in cmd_lower for w in ["powerpoint", "ppt", "pptx", "thuyết trình", "slide", "trình chiếu"]):
+            return self._handle_powerpoint_command(user_command)
 
-        # 3. NHẬN DIỆN LỆNH WORD (Mở Word, gõ nội dung, lưu file)
-        elif any(w in cmd_lower for w in ["word", "văn bản", "soạn thảo", "đơn", "tài liệu"]):
+        # 3. NHẬN DIỆN LỆNH WORD (Mở Word, soạn thảo văn bản, đơn, tài liệu, bài viết)
+        elif any(w in cmd_lower for w in ["word", "văn bản", "soạn thảo", "đơn", "tài liệu", "bài viết"]):
             return self._handle_word_command(user_command)
 
-        # 4. NHẬN DIỆN LỆNH EXCEL (Mở Excel, tạo bảng tính, lưu file)
+        # 4. NHẬN DIỆN LỆNH EXCEL (Mở Excel, tạo bảng tính, số liệu, thu chi)
         elif any(w in cmd_lower for w in ["excel", "bảng tính", "bảng số liệu", "thu chi"]):
             return self._handle_excel_command(user_command)
 
-        # 5. NHẬN DIỆN LỆNH CHROME / TRÌNH DUYỆT (Mở web, tìm kiếm Google)
-        elif any(w in cmd_lower for w in ["chrome", "web", "tìm kiếm", "google", "tra cứu", "lên mạng"]):
+        # 5. NHẬN DIỆN LỆNH NOTEPAD / GHI CHÚ
+        elif any(w in cmd_lower for w in ["notepad", "sổ tay", "ghi chú", "note"]):
+            return self._handle_notepad_command(user_command)
+
+        # 6. NHẬN DIỆN LỆNH TRÌNH DUYỆT (Cốc Cốc, Chrome, Edge, Firefox, tìm kiếm web)
+        elif any(w in cmd_lower for w in ["cốc cốc", "coccoc", "chrome", "edge", "firefox", "brave", "opera", "trình duyệt", "web", "tìm kiếm", "google", "tra cứu", "lên mạng"]):
             return self._handle_browser_command(user_command)
 
-        # 6. NHẬN DIỆN LỆNH MỞ PHẦN MỀM THÔNG DỤNG
+        # 7. NHẬN DIỆN LỆNH MỞ PHẦN MỀM THÔNG DỤNG
         elif any(w in cmd_lower for w in ["mở", "bật", "khởi động"]):
             return self._handle_open_app_command(user_command)
 
-        # 7. LỆNH TỰ DO: DÙNG AI PHÂN TÍCH Ý ĐỊNH VÀ THỰC THI
+        # 8. LỆNH TỰ DO: DÙNG AI PHÂN TÍCH Ý ĐỊNH VÀ THỰC THI
         else:
             return self._handle_ai_dynamic_action(user_command)
+
+    def _open_url_in_target_browser(self, url: str, user_command: str = "") -> str:
+        """Mở URL bằng chính xác trình duyệt người dùng muốn: Cốc Cốc, Chrome, Edge, Firefox..."""
+        cmd_l = (user_command or "").lower()
+
+        target_key = None
+        if any(k in cmd_l for k in ["cốc cốc", "coccoc", "coc coc"]):
+            target_key = "coccoc"
+        elif any(k in cmd_l for k in ["chrome", "gg chrome", "google chrome"]):
+            target_key = "chrome"
+        elif any(k in cmd_l for k in ["edge", "ms edge", "microsoft edge"]):
+            target_key = "edge"
+        elif any(k in cmd_l for k in ["firefox", "cáo lửa"]):
+            target_key = "firefox"
+        elif "brave" in cmd_l:
+            target_key = "brave"
+        elif "opera" in cmd_l:
+            target_key = "opera"
+
+        browser_candidates = {
+            "coccoc": [
+                r"C:\Program Files\CocCoc\Browser\Application\browser.exe",
+                r"C:\Program Files (x86)\CocCoc\Browser\Application\browser.exe",
+                str(Path.home() / r"AppData\Local\CocCoc\Browser\Application\browser.exe"),
+            ],
+            "chrome": [
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                str(Path.home() / r"AppData\Local\Google\Chrome\Application\chrome.exe"),
+            ],
+            "edge": [
+                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            ],
+            "firefox": [
+                r"C:\Program Files\Mozilla Firefox\firefox.exe",
+                r"C:\Program Files (x86)\Mozilla Firefox\firefox.exe",
+            ],
+            "brave": [
+                r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+                str(Path.home() / r"AppData\Local\BraveSoftware\Brave-Browser\Application\brave.exe"),
+            ],
+            "opera": [
+                str(Path.home() / r"AppData\Local\Programs\Opera\launcher.exe"),
+                r"C:\Program Files\Opera\launcher.exe",
+            ],
+        }
+
+        # 1. Nếu người dùng chỉ định đích danh
+        if target_key and target_key in browser_candidates:
+            for p in browser_candidates[target_key]:
+                if Path(p).exists():
+                    try:
+                        subprocess.Popen(f'"{p}" "{url}"', shell=True)
+                        return target_key.title()
+                    except Exception:
+                        pass
+
+        # 2. Nếu không chỉ định hoặc không có, ưu tiên Cốc Cốc hoặc Chrome có trên máy
+        for b_name in ["coccoc", "chrome", "edge"]:
+            for p in browser_candidates[b_name]:
+                if Path(p).exists():
+                    try:
+                        subprocess.Popen(f'"{p}" "{url}"', shell=True)
+                        return b_name.title()
+                    except Exception:
+                        pass
+
+        # 3. Fallback trình duyệt mặc định hệ thống
+        try:
+            subprocess.Popen(f'start "" "{url}"', shell=True)
+            return "Trình duyệt mặc định"
+        except Exception:
+            import webbrowser
+            webbrowser.open(url)
+            return "Trình duyệt mặc định"
 
     def _clean_command_content(self, command: str, keywords: list) -> str:
         """Trích xuất phần nội dung người dùng muốn viết khi không có mạng/AI."""
         cleaned = command
         for kw in keywords:
             cleaned = re.sub(kw, "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^(và|hãy|giúp tôi|hộ tôi|làm ơn)?\s*(ghi|viết|tạo|soạn|gõ)\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"^(và|hãy|giúp tôi|hộ tôi|làm ơn)?\s*(ghi|viết|tạo|soạn|gõ|làm)\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(
-            r"\s*(nhé|nha|nhé rồi lưu lại|rồi lưu lại|lưu lại|lưu ra desktop|giùm nhé|giúp nhé)\.?$",
+            r"\s*(nhé|nha|nhé rồi lưu lại|rồi lưu lại|lưu lại|lưu ra desktop|giùm nhé|giúp nhé|đi nhé|đi)\.?$",
             "",
             cleaned,
             flags=re.IGNORECASE
@@ -81,8 +163,7 @@ class DesktopController:
         return cleaned
 
     def _handle_youtube_command(self, command: str) -> dict:
-        """Xử lý tác vụ: Mở YouTube, tìm kiếm bài hát/video và TỰ ĐỘNG PHÁT BÀI NHẠC trực tiếp."""
-        # 1. Trích xuất tên bài hát/nội dung
+        """Xử lý tác vụ: Mở YouTube, tìm bài hát/video và PHÁT BÀI NHẠC LUÔN trên đúng trình duyệt yêu cầu."""
         ai_query = ""
         try:
             p = (
@@ -100,26 +181,30 @@ class DesktopController:
         if not ai_query:
             c = command.lower()
             drop_phrases = [
-                "mở gg chrome", "mở google chrome", "mở chrome", "mở trình duyệt",
-                "tim youtube..com", "tìm youtube..com", "vào youtube..com", "youtube..com",
-                "tim youtube.com", "tìm youtube.com", "vào youtube.com", "youtube.com",
-                "tim youtube", "tìm youtube", "vào youtube", "lên youtube", "youtube",
-                "rồi tìm 1 bài nhạc", "rồi tìm bài nhạc", "rồi tìm 1 bài", "rồi tìm bài", "rồi tìm",
+                "mở trình duyệt cốc cốc", "vô trình duyệt cốc cốc", "trình duyệt cốc cốc", "cốc cốc", "coccoc",
+                "mở gg chrome", "mở google chrome", "mở chrome", "trình duyệt chrome", "chrome",
+                "mở trình duyệt edge", "trình duyệt edge", "edge",
+                "mở trình duyệt firefox", "trình duyệt firefox", "firefox",
+                "mở trình duyệt", "vô trình duyệt", "trình duyệt",
+                "tim youtube..com", "tìm youtube..com", "vào youtube..com", "vô youtube..com", "youtube..com",
+                "tim youtube.com", "tìm youtube.com", "vào youtube.com", "vô youtube.com", "youtube.com",
+                "tim youtube", "tìm youtube", "vào youtube", "vô youtube", "lên youtube", "youtube",
+                "rồi vô", "rồi vào", "rồi tìm 1 bài nhạc", "rồi tìm bài nhạc", "rồi tìm 1 bài", "rồi tìm bài", "rồi tìm",
                 "tìm 1 bài nhạc", "tìm bài nhạc", "tìm 1 bài", "tìm bài", "tìm kiếm", "tìm",
+                "mở 1 bài nhạc", "mở bài nhạc", "mở 1 bài", "mở bài",
                 "bấm vô phát bài nhạc luôn", "bấm vô phát bài luôn", "bấm phát bài nhạc luôn",
                 "bấm vô phát luôn", "bấm phát luôn", "phát bài nhạc luôn", "phát bài hát luôn",
                 "phát nhạc luôn", "phát luôn", "nghe luôn", "bật bài nhạc", "bật bài hát",
                 "bật nhạc", "nghe nhạc", "phát bài", "phát", "bật", "nghe", "xem",
-                "luôn nhé", "luôn nha", "luôn đi", "nhé", "nha", "đi", "luôn",
+                "luôn nhé", "luôn nha", "luôn đi", "nhé", "nha", "đi nhé", "đi", "luôn",
                 "bấm vô", "bấm vào", "click vào"
             ]
             for p in drop_phrases:
                 c = c.replace(p, " ")
             c = re.sub(r"\s+", " ", c).strip()
             c = c.replace("rimex", "remix")
-            ai_query = c or "nhạc remix"
+            ai_query = c or "nhạc remix mới nhất"
 
-        # 2. Tìm ID video trên YouTube để PHÁT NGAY LẬP TỨC
         enc = urllib.parse.quote(ai_query)
         search_url = f"https://www.youtube.com/results?search_query={enc}"
         target_url = search_url
@@ -139,27 +224,115 @@ class DesktopController:
         except Exception:
             pass
 
-        # 3. Mở Google Chrome hoặc trình duyệt mặc định với video đó
-        try:
-            subprocess.Popen(f'start chrome "{target_url}"', shell=True)
-        except Exception:
-            subprocess.Popen(f'start "" "{target_url}"', shell=True)
+        used_browser = self._open_url_in_target_browser(target_url, command)
 
         if video_found:
-            msg = f"🎵 Đã tự động mở YouTube và ĐANG PHÁT BÀI NHẠC: '{ai_query}' ngay lập tức cho bạn!"
+            msg = f"🎵 Đã tự động mở {used_browser} và ĐANG PHÁT BÀI NHẠC: '{ai_query}' ngay lập tức cho bạn!"
         else:
-            msg = f"🎵 Đã tự động mở YouTube tìm kiếm bài nhạc: '{ai_query}'!"
+            msg = f"🎵 Đã mở {used_browser} tìm kiếm bài nhạc: '{ai_query}' trên YouTube!"
 
         return {
             "success": True,
             "action": "youtube_played",
             "message": msg,
             "url": target_url,
-            "query": ai_query
+            "query": ai_query,
+            "browser": used_browser,
         }
 
+    def _handle_powerpoint_command(self, command: str) -> dict:
+        """Xử lý tác vụ: Tạo bài thuyết trình PowerPoint (.pptx) theo bất kỳ đề tài, bài học nào."""
+        now = datetime.datetime.now()
+        now_str = now.strftime("Thứ %A, ngày %d/%m/%Y, lúc %H:%M:%S")
+
+        prompt = (
+            f"Bạn là chuyên gia thiết kế bài thuyết trình PowerPoint AI PTK chuyên nghiệp.\n"
+            f"Người dùng ra lệnh tạo bài thuyết trình: '{command}'.\n"
+            f"Thời gian: {now_str}.\n"
+            "Hãy xây dựng dàn ý và nội dung bài thuyết trình đầy đủ, chuyên nghiệp:\n"
+            "- Mỗi slide bắt đầu bằng định dạng: ## <Tiêu đề Slide>\n"
+            "- Bên dưới là các ý phân tích chi tiết, dùng dấu gạch đầu dòng: - <Nội dung chi tiết>\n"
+            "- Bao gồm slide giới thiệu, các slide nội dung bài học/đề tài theo đúng yêu cầu, và slide kết luận.\n"
+            "- Dòng cuối cùng ghi: FILENAME: <ten_file_ngan_gon_khong_dau.pptx>\n"
+            "Bắt đầu bài thuyết trình ngay lập tức, không giải thích bên ngoài."
+        )
+
+        ai_reply = ""
+        try:
+            ai_reply = self.ai.generate(prompt=prompt)
+        except Exception:
+            ai_reply = ""
+
+        is_ai_valid = bool(
+            ai_reply
+            and "##" in ai_reply
+            and "Chưa cấu hình" not in ai_reply
+        )
+
+        raw_topic = self._clean_command_content(
+            command,
+            ["mở powerpoint", "vô powerpoint", "mở ppt", "vô ppt", "tạo bài thuyết trình", "soạn bài thuyết trình", "tạo slide", "soạn slide", "đề tài", "bài thuyết trình"]
+        )
+
+        if is_ai_valid:
+            slides_text = re.sub(r"👉\s*Bạn có thể bấm nút.*?$", "", ai_reply, flags=re.DOTALL).strip()
+            fname_m = re.search(r"FILENAME:\s*([^\s\n]+\.pptx)", slides_text, re.IGNORECASE)
+            if fname_m:
+                base_slug = Path(fname_m.group(1)).stem
+                slides_text = re.sub(r"FILENAME:\s*[^\s\n]+\.pptx", "", slides_text, flags=re.IGNORECASE).strip()
+            else:
+                base_slug = "ThuyetTrinh_AI_PTK"
+        else:
+            base_slug = "BaiThuyetTrinh"
+            slides_text = (
+                f"## 1. Giới thiệu Đề tài: {raw_topic or 'Đề tài Nghiên Cứu'}\n"
+                f"- Tổng quan nội dung và mục tiêu thuyết trình\n"
+                f"- Thời gian thực hiện: {now_str}\n"
+                f"- Người trình bày: Phan Tấn Kiệt\n\n"
+                f"## 2. Phân tích Nội dung Trọng tâm\n"
+                f"- Khảo sát thực tế và các luận điểm chính\n"
+                f"- Số liệu và bằng chứng minh họa chi tiết\n"
+                f"- Đánh giá ưu điểm và giải pháp triển khai\n\n"
+                f"## 3. Kết luận & Đề xuất\n"
+                f"- Tóm lược kết quả đạt được của đề tài\n"
+                f"- Kế hoạch hành động và ứng dụng thực tiễn\n"
+                f"- Cảm ơn quý vị đã lắng nghe bài thuyết trình!"
+            )
+
+        timestamp = now.strftime("%Y%m%d_%H%M%S")
+        target_path = self.desktop_dir / f"{base_slug}_{timestamp}.pptx"
+
+        pptx_bytes = ExportService.text_to_pptx(slides_text, title=raw_topic or "BÀI THUYẾT TRÌNH")
+
+        if pptx_bytes:
+            for attempt in range(10):
+                try:
+                    with open(target_path, "wb") as f:
+                        f.write(pptx_bytes)
+                    break
+                except PermissionError:
+                    target_path = self.desktop_dir / f"{base_slug}_{timestamp}_{attempt+1}.pptx"
+
+            try:
+                os.startfile(str(target_path))
+                return {
+                    "success": True,
+                    "action": "powerpoint_created_and_opened",
+                    "message": f"📊 Đã tự động tạo bài thuyết trình PowerPoint '{target_path.name}', lưu ra Desktop và mở Microsoft PowerPoint lên màn hình cho bạn!",
+                    "file_path": str(target_path),
+                }
+            except Exception as e:
+                return {
+                    "success": True,
+                    "action": "powerpoint_saved",
+                    "message": f"Đã tạo file PowerPoint tại '{target_path}', lỗi khi tự mở PowerPoint: {e}",
+                    "file_path": str(target_path),
+                }
+        else:
+            return {"success": False, "message": "Không thể khởi tạo file PowerPoint."}
+
     def _handle_word_command(self, command: str) -> dict:
-        """Xử lý tác vụ: Mở Word, soạn nội dung chi tiết theo lệnh người dùng và tự lưu file ra Desktop."""
+        """Xử lý tác vụ: Mở Word, soạn nội dung chi tiết theo bất kỳ yêu cầu, đề tài nào của người dùng."""
         now = datetime.datetime.now()
         now_str = now.strftime("Thứ %A, ngày %d/%m/%Y, lúc %H:%M:%S")
 
@@ -168,8 +341,9 @@ class DesktopController:
             f"Người dùng ra lệnh điều khiển máy tính: '{command}'.\n"
             f"Thời gian hiện tại: {now_str}.\n"
             "Hãy hoàn thành CHÍNH XÁC mọi yêu cầu người dùng đặt ra trong lệnh trên:\n"
-            "- Nếu người dùng ghi rõ từ khóa/câu chữ (ví dụ: 'Chào Kiệt', 'thêm 3333', 'ngày tháng', 'ghi tên Kiệt 100 lần'), BẮT BUỘC phải đưa đầy đủ các thông tin đó vào văn bản.\n"
-            "- Hãy trình bày văn bản chuẩn đẹp theo định dạng Markdown (Tiêu đề, lời chào, các đoạn văn, ngày tháng nếu có yêu cầu, bảng biểu nếu cần).\n"
+            "- Nếu người dùng yêu cầu soạn bài học, đề tài, văn bản, đơn từ, hợp đồng, hãy soạn thảo đầy đủ, chuẩn mực, bố cục đẹp mắt.\n"
+            "- Nếu người dùng ghi rõ từ khóa/câu chữ (ví dụ: 'ghi tên Kiệt 100 lần', 'Chào Kiệt 3333'), BẮT BUỘC phải đưa đầy đủ các thông tin đó vào văn bản.\n"
+            "- Hãy trình bày văn bản chuẩn đẹp theo định dạng Markdown (Tiêu đề, các mục lớn nhỏ, bảng biểu nếu cần).\n"
             "- Dòng cuối cùng ghi: FILENAME: <tên_file_ngắn_gọn_không_dấu.docx>\n"
             "Viết trực tiếp nội dung văn bản ngay lập tức, không giải thích bên ngoài."
         )
@@ -346,10 +520,10 @@ class DesktopController:
             return {"success": False, "message": f"Lỗi mở Notepad: {e}"}
 
     def _handle_browser_command(self, command: str) -> dict:
-        """Tự động mở trình duyệt Chrome, trang web cụ thể hoặc tìm kiếm Google."""
+        """Tự động mở trang web hoặc tìm kiếm Google trên đúng trình duyệt được yêu cầu (Cốc Cốc, Chrome, Edge...)."""
         cmd_l = command.lower()
 
-        # Kiểm tra các trang web phổ biến
+        # 1. Kiểm tra các trang web phổ biến
         direct_sites = {
             "facebook": "https://www.facebook.com",
             "fb": "https://www.facebook.com",
@@ -368,21 +542,23 @@ class DesktopController:
         }
         for site_key, site_url in direct_sites.items():
             if site_key in cmd_l:
-                try:
-                    subprocess.Popen(f'start chrome "{site_url}"', shell=True)
-                except Exception:
-                    subprocess.Popen(f'start "" "{site_url}"', shell=True)
+                used_b = self._open_url_in_target_browser(site_url, command)
                 return {
                     "success": True,
                     "action": "website_opened",
-                    "message": f"🌐 Đã tự động mở trang web {site_key.title()}: {site_url}",
+                    "message": f"🌐 Đã mở trang web {site_key.title()} trên {used_b}: {site_url}",
                     "url": site_url,
+                    "browser": used_b,
                 }
 
-        # Trích xuất từ khóa tìm kiếm Google
+        # 2. Trích xuất từ khóa tìm kiếm Google
         clean_kw = command
         for prefix in [
-            "mở gg chrome", "mở google chrome", "mở chrome", "mở web", "mở trình duyệt",
+            "mở trình duyệt cốc cốc", "vô trình duyệt cốc cốc", "cốc cốc", "coccoc",
+            "mở gg chrome", "mở google chrome", "mở chrome", "chrome",
+            "mở trình duyệt edge", "edge",
+            "mở trình duyệt firefox", "firefox",
+            "mở web", "mở trình duyệt", "vô trình duyệt",
             "tìm kiếm trên google", "tìm kiếm google", "tìm trên google",
             "tìm kiếm", "tra cứu", "tìm", "lên mạng tìm"
         ]:
@@ -391,32 +567,33 @@ class DesktopController:
 
         if not clean_kw:
             url = "https://www.google.com"
-            msg = "Đã tự động mở trình duyệt Google Chrome!"
+            msg_act = "Đã mở trang chủ tìm kiếm!"
         elif clean_kw.startswith("http"):
             url = clean_kw
-            msg = f"Đã tự động mở trang web: {url}"
+            msg_act = f"Đã mở trang web: {url}"
         else:
             enc = urllib.parse.quote(clean_kw)
             url = f"https://www.google.com/search?q={enc}"
-            msg = f"🔍 Đã mở Google Chrome và tìm kiếm: '{clean_kw}'!"
+            msg_act = f"Đã tìm kiếm: '{clean_kw}'"
 
-        try:
-            subprocess.Popen(f'start chrome "{url}"', shell=True)
-        except Exception:
-            subprocess.Popen(f'start "" "{url}"', shell=True)
-
-        return {"success": True, "action": "browser_opened", "message": msg, "url": url}
+        used_b = self._open_url_in_target_browser(url, command)
+        return {"success": True, "action": "browser_opened", "message": f"🔍 {msg_act} trên {used_b}!", "url": url, "browser": used_b}
 
     def _handle_open_app_command(self, command: str) -> dict:
-        """Tự động mở phần mềm máy tính (Notepad, Calculator, Word, Excel, Explorer...)."""
+        """Tự động mở phần mềm máy tính (PowerPoint, Word, Excel, Cốc Cốc, Chrome, Notepad...)."""
         cmd_l = command.lower()
         app_dict = {
+            "powerpoint": ("powerpnt", "Microsoft PowerPoint"),
+            "ppt": ("powerpnt", "Microsoft PowerPoint"),
+            "cốc cốc": (r'"C:\Program Files\CocCoc\Browser\Application\browser.exe"', "Trình duyệt Cốc Cốc"),
+            "coccoc": (r'"C:\Program Files\CocCoc\Browser\Application\browser.exe"', "Trình duyệt Cốc Cốc"),
             "notepad": ("notepad", "Sổ tay ghi chú (Notepad)"),
             "máy tính": ("calc", "Máy tính cầm tay (Calculator)"),
             "calculator": ("calc", "Máy tính cầm tay (Calculator)"),
             "word": ("winword", "Microsoft Word"),
             "excel": ("excel", "Microsoft Excel"),
             "chrome": ("start chrome", "Google Chrome"),
+            "edge": ("start msedge", "Microsoft Edge"),
             "thư mục": ("explorer", "Quản lý tệp tin (File Explorer)"),
             "desktop": (f'explorer "{self.desktop_dir}"', "Màn hình Desktop"),
         }
