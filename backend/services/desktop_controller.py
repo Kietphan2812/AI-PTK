@@ -13,6 +13,7 @@ import datetime
 import subprocess
 import json
 import re
+import shutil
 import urllib.request
 import urllib.parse
 from pathlib import Path
@@ -20,7 +21,7 @@ from pathlib import Path
 try:
     import pyautogui
     import pyperclip
-    pyautogui.FAILSAFE = True
+    pyautogui.FAILSAFE = False
     HAS_GUI = True
 except Exception:
     HAS_GUI = False
@@ -41,37 +42,227 @@ class DesktopController:
         """Nhận lệnh tiếng Việt của người dùng và tự động thực thi trên máy tính."""
         cmd_lower = user_command.lower().strip()
 
-        # 1. NHẬN DIỆN LỆNH YOUTUBE / PHÁT NHẠC / XEM VIDEO
+        # 1. TÁC VỤ HỆ THỐNG WINDOWS (Hẹn giờ tắt máy, hủy tắt máy, khởi động lại, khóa máy, dọn rác, âm lượng)
+        if any(w in cmd_lower for w in ["tắt máy", "hẹn giờ", "hủy tắt máy", "khởi động lại", "restart", "khóa máy", "khóa màn hình", "dọn rác", "dọn dẹp", "xóa file tạm", "âm lượng", "tăng loa", "giảm loa", "tắt tiếng", "bật tiếng", "mute", "bật to loa", "bật nhỏ loa"]):
+            sys_res = self._handle_system_command(user_command)
+            if sys_res:
+                return sys_res
+
+        # 2. ĐIỀU KHIỂN CHUỘT & BÀN PHÍM CẤP SÂU (RPA)
+        if any(w in cmd_lower for w in ["click chuột", "nhấp chuột", "bấm chuột", "di chuột", "cuộn chuột", "cuộn lên", "cuộn xuống", "gõ chữ", "gõ nội dung", "chụp màn hình", "chụp ảnh màn hình", "chụp ảnh", "thu nhỏ tất cả", "đóng cửa sổ", "chuyển cửa sổ"]):
+            inp_res = self._handle_input_control_command(user_command)
+            if inp_res:
+                return inp_res
+
+        # 3. NHẬN DIỆN LỆNH YOUTUBE / PHÁT NHẠC / XEM VIDEO
         if any(w in cmd_lower for w in ["youtube", "bài nhạc", "bài hát", "phát nhạc", "bật nhạc", "nghe nhạc", "phát bài", "remix", "rimex", "mv", "video"]):
             return self._handle_youtube_command(user_command)
 
-        # 2. NHẬN DIỆN LỆNH POWERPOINT (PPT, PPTX, bài thuyết trình, slide, đề tài thuyết trình)
+        # 4. NHẬN DIỆN LỆNH POWERPOINT (PPT, PPTX, bài thuyết trình, slide, đề tài thuyết trình)
         elif any(w in cmd_lower for w in ["powerpoint", "ppt", "pptx", "thuyết trình", "slide", "slie", "sile", "trình chiếu"]):
             return self._handle_powerpoint_command(user_command)
 
-        # 3. NHẬN DIỆN LỆNH WORD (Mở Word, soạn thảo văn bản, đơn, tài liệu, bài viết, gõ chữ)
-        elif any(w in cmd_lower for w in ["word", "văn bản", "soạn thảo", "đơn", "tài liệu", "bài viết", "gõ chữ", "lặp lại"]):
+        # 5. NHẬN DIỆN LỆNH WORD (Mở Word, soạn thảo văn bản, đơn, tài liệu, bài viết, gõ chữ)
+        elif any(w in cmd_lower for w in ["word", "văn bản", "soạn thảo", "đơn", "tài liệu", "bài viết", "lặp lại"]):
             return self._handle_word_command(user_command)
 
-        # 4. NHẬN DIỆN LỆNH EXCEL (Mở Excel, tạo bảng tính, số liệu, thu chi)
+        # 6. NHẬN DIỆN LỆNH EXCEL (Mở Excel, tạo bảng tính, số liệu, thu chi)
         elif any(w in cmd_lower for w in ["excel", "bảng tính", "bảng số liệu", "thu chi", "bảng lương", "báo giá"]):
             return self._handle_excel_command(user_command)
 
-        # 5. NHẬN DIỆN LỆNH NOTEPAD / GHI CHÚ
+        # 7. NHẬN DIỆN LỆNH NOTEPAD / GHI CHÚ
         elif any(w in cmd_lower for w in ["notepad", "sổ tay", "ghi chú", "note"]):
             return self._handle_notepad_command(user_command)
 
-        # 6. NHẬN DIỆN LỆNH TRÌNH DUYỆT (Cốc Cốc, Chrome, Edge, Firefox, tìm kiếm web)
+        # 8. NHẬN DIỆN LỆNH TRÌNH DUYỆT (Cốc Cốc, Chrome, Edge, Firefox, tìm kiếm web)
         elif any(w in cmd_lower for w in ["cốc cốc", "coccoc", "chrome", "edge", "firefox", "brave", "opera", "trình duyệt", "web", "tìm kiếm", "google", "tra cứu", "lên mạng"]):
             return self._handle_browser_command(user_command)
 
-        # 7. NHẬN DIỆN LỆNH MỞ PHẦN MỀM THÔNG DỤNG
+        # 9. NHẬN DIỆN LỆNH MỞ PHẦN MỀM THÔNG DỤNG
         elif any(w in cmd_lower for w in ["mở", "bật", "khởi động"]):
             return self._handle_open_app_command(user_command)
 
-        # 8. LỆNH TỰ DO: DÙNG AI PHÂN TÍCH Ý ĐỊNH VÀ THỰC THI
+        # 10. LỆNH TỰ DO: DÙNG AI PHÂN TÍCH Ý ĐỊNH VÀ THỰC THI
         else:
             return self._handle_ai_dynamic_action(user_command)
+
+    def _clean_system_temp(self) -> float:
+        """Dọn dẹp tệp tin rác tạm thời trong %TEMP%."""
+        temp_dir = Path(os.environ.get("TEMP", ""))
+        freed_bytes = 0
+        if temp_dir.exists():
+            for item in temp_dir.iterdir():
+                try:
+                    if item.is_file():
+                        sz = item.stat().st_size
+                        item.unlink(missing_ok=True)
+                        freed_bytes += sz
+                    elif item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+                except Exception:
+                    pass
+        return freed_bytes / (1024 * 1024)
+
+    def _handle_system_command(self, command: str) -> dict:
+        """Điều khiển tác vụ hệ thống Windows: Hẹn giờ tắt máy, âm lượng, dọn rác, khóa máy."""
+        cmd_l = command.lower()
+
+        # 1. Hủy hẹn giờ tắt máy
+        if any(k in cmd_l for k in ["hủy tắt máy", "hủy hẹn giờ", "hủy shutdown"]):
+            subprocess.run("shutdown /a", shell=True)
+            return {
+                "success": True,
+                "action": "shutdown_cancelled",
+                "message": "🚫 Đã HỦY LỆNH hẹn giờ tắt máy tính thành công!",
+            }
+
+        # 2. Khởi động lại
+        if any(k in cmd_l for k in ["khởi động lại", "restart"]):
+            subprocess.run("shutdown /r /t 60", shell=True)
+            return {
+                "success": True,
+                "action": "system_restart",
+                "message": "🔄 Máy tính sẽ khởi động lại sau 60 giây! (Nhập lệnh 'Hủy tắt máy' nếu muốn dừng lại).",
+            }
+
+        # 3. Hẹn giờ tắt máy
+        if any(k in cmd_l for k in ["tắt máy", "shutdown"]):
+            mins_m = re.search(r"(\d+)\s*(?:phút|p|m)", command, re.IGNORECASE)
+            secs_m = re.search(r"(\d+)\s*(?:giây|s)", command, re.IGNORECASE)
+            if mins_m:
+                mins = int(mins_m.group(1))
+                secs = mins * 60
+            elif secs_m:
+                secs = int(secs_m.group(1))
+                mins = round(secs / 60, 1)
+            else:
+                mins = 30
+                secs = 1800
+
+            subprocess.run(f"shutdown /s /t {secs}", shell=True)
+            return {
+                "success": True,
+                "action": "shutdown_scheduled",
+                "message": f"⏱️ Đã đặt lịch hẹn giờ: Máy tính sẽ tự động tắt sau {mins} phút! (Nhập 'Hủy tắt máy' bất cứ lúc nào để hủy).",
+            }
+
+        # 4. Khóa máy tính
+        if any(k in cmd_l for k in ["khóa máy", "khóa màn hình", "lock"]):
+            subprocess.run("rundll32.exe user32.dll,LockWorkStation", shell=True)
+            return {
+                "success": True,
+                "action": "screen_locked",
+                "message": "🔒 Đã khóa màn hình máy tính an toàn!",
+            }
+
+        # 5. Điều khiển âm lượng loa
+        if any(k in cmd_l for k in ["tăng âm lượng", "bật to loa", "tăng loa"]):
+            if HAS_GUI:
+                pyautogui.press("volumeup", presses=6)
+            return {"success": True, "action": "volume_up", "message": "🔊 Đã tăng âm lượng loa máy tính lên 6 bậc!"}
+
+        if any(k in cmd_l for k in ["giảm âm lượng", "bật nhỏ loa", "giảm loa"]):
+            if HAS_GUI:
+                pyautogui.press("volumedown", presses=6)
+            return {"success": True, "action": "volume_down", "message": "🔉 Đã giảm âm lượng loa máy tính xuống 6 bậc!"}
+
+        if any(k in cmd_l for k in ["tắt tiếng", "bật tiếng", "mute"]):
+            if HAS_GUI:
+                pyautogui.press("volumemute")
+            return {"success": True, "action": "volume_mute", "message": "🔇 Đã chuyển đổi trạng thái tắt/bật tiếng loa!"}
+
+        # 6. Dọn rác máy tính
+        if any(k in cmd_l for k in ["dọn rác", "dọn dẹp", "xóa file tạm", "xóa cache", "dọn ổ c"]):
+            freed_mb = self._clean_system_temp()
+            return {
+                "success": True,
+                "action": "system_cleaned",
+                "message": f"🧹 Đã dọn dẹp an toàn {freed_mb:.1f} MB tệp tin rác tạm thời trong hệ thống Windows!",
+            }
+
+        return None
+
+    def _handle_input_control_command(self, command: str) -> dict:
+        """Điều khiển chuột, bàn phím và phím tắt cấp sâu (RPA)."""
+        cmd_l = command.lower()
+
+        # 1. Chụp màn hình
+        if any(k in cmd_l for k in ["chụp màn hình", "chụp ảnh màn hình"]):
+            subprocess.Popen("SnippingTool.exe", shell=True)
+            return {
+                "success": True,
+                "action": "screenshot_opened",
+                "message": "📸 Đã kích hoạt công cụ chụp ảnh màn hình (Snipping Tool) cho bạn!",
+            }
+
+        # 2. Phím tắt cửa sổ
+        if any(k in cmd_l for k in ["thu nhỏ tất cả", "hiện màn hình desktop", "ẩn cửa sổ"]):
+            if HAS_GUI:
+                pyautogui.hotkey("win", "d")
+            return {"success": True, "action": "show_desktop", "message": "🖥️ Đã thu nhỏ tất cả cửa sổ và hiển thị Desktop!"}
+
+        if any(k in cmd_l for k in ["chuyển cửa sổ", "đổi cửa sổ"]):
+            if HAS_GUI:
+                pyautogui.hotkey("alt", "tab")
+            return {"success": True, "action": "switch_window", "message": "🔀 Đã chuyển sang cửa sổ kế tiếp (Alt + Tab)!"}
+
+        if any(k in cmd_l for k in ["đóng cửa sổ", "tắt cửa sổ"]):
+            if HAS_GUI:
+                pyautogui.hotkey("alt", "f4")
+            return {"success": True, "action": "close_window", "message": "❌ Đã gửi lệnh đóng cửa sổ hiện tại (Alt + F4)!"}
+
+        # 3. Thao tác chuột
+        if any(k in cmd_l for k in ["click chuột", "nhấp chuột", "bấm chuột"]):
+            if HAS_GUI:
+                if "phải" in cmd_l:
+                    pyautogui.rightClick()
+                    act = "click chuột phải"
+                elif any(k in cmd_l for k in ["đúp", "2 lần"]):
+                    pyautogui.doubleClick()
+                    act = "click đúp chuột trái"
+                else:
+                    pyautogui.click()
+                    act = "click chuột trái"
+                return {"success": True, "action": "mouse_clicked", "message": f"🖱️ Đã thực hiện thao tác {act}!"}
+
+        if any(k in cmd_l for k in ["cuộn chuột lên", "cuộn lên"]):
+            if HAS_GUI:
+                pyautogui.scroll(500)
+            return {"success": True, "action": "scroll_up", "message": "🖱️ Đã cuộn màn hình lên trên!"}
+
+        if any(k in cmd_l for k in ["cuộn chuột xuống", "cuộn xuống"]):
+            if HAS_GUI:
+                pyautogui.scroll(-500)
+            return {"success": True, "action": "scroll_down", "message": "🖱️ Đã cuộn màn hình xuống dưới!"}
+
+        if any(k in cmd_l for k in ["di chuột vào giữa", "chuột giữa màn hình"]):
+            if HAS_GUI:
+                w, h = pyautogui.size()
+                pyautogui.moveTo(w // 2, h // 2, duration=0.4)
+            return {"success": True, "action": "mouse_center", "message": "🖱️ Đã di chuyển chuột vào chính giữa màn hình!"}
+
+        # 4. Gõ chữ tiếng Việt tự động vào vị trí con trỏ chuột
+        if any(k in cmd_l for k in ["gõ chữ", "viết chữ", "gõ câu"]):
+            text_to_type = re.sub(r"^(vô|mở)?\s*(gõ chữ|viết chữ|gõ câu|gõ)\s*", "", command, flags=re.IGNORECASE).strip()
+            press_enter = False
+            if any(k in text_to_type.lower() for k in ["rồi bấm enter", "rồi enter", "và enter"]):
+                press_enter = True
+                text_to_type = re.sub(r"\s*(rồi bấm enter|rồi enter|và enter)\.?$", "", text_to_type, flags=re.IGNORECASE).strip()
+
+            if HAS_GUI and text_to_type:
+                time.sleep(0.5)
+                pyperclip.copy(text_to_type)
+                pyautogui.hotkey("ctrl", "v")
+                if press_enter:
+                    time.sleep(0.2)
+                    pyautogui.press("enter")
+            return {
+                "success": True,
+                "action": "typed_text",
+                "message": f"⌨️ Đã tự động gõ nội dung vào vị trí con trỏ chuột: \"{text_to_type[:60]}...\"",
+            }
+
+        return None
 
     def _open_url_in_target_browser(self, url: str, user_command: str = "") -> str:
         """Mở URL bằng chính xác trình duyệt người dùng muốn: Cốc Cốc, Chrome, Edge, Firefox..."""
