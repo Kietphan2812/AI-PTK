@@ -10,7 +10,11 @@ import threading
 from pathlib import Path
 
 # Đảm bảo import được backend services
-ROOT_DIR = Path(__file__).resolve().parent
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    ROOT_DIR = Path(sys._MEIPASS)
+else:
+    ROOT_DIR = Path(__file__).resolve().parent
+
 BACKEND_DIR = ROOT_DIR / "backend"
 for p in [str(ROOT_DIR), str(BACKEND_DIR)]:
     if p not in sys.path:
@@ -217,3 +221,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

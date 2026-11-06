@@ -8,7 +8,20 @@ import io
 import re
 import datetime
 import zipfile
-import xml.sax.saxutils as saxutils
+
+
+def xml_escape(text: str) -> str:
+    """Chuyển đổi ký tự XML an toàn thuần Python 100%, không phụ thuộc vào package xml."""
+    if text is None:
+        return ""
+    return (
+        str(text)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&apos;")
+    )
 
 # Kiểm tra thư viện ngoài (nếu có thì dùng, không có thì fallback sang Pure Python Engine)
 try:
@@ -57,7 +70,7 @@ class ExportService:
         body_xml_parts = []
 
         # Tiêu đề chính
-        esc_title = saxutils.escape(title)
+        esc_title = xml_escape(title)
         body_xml_parts.append(
             f'<w:p><w:pPr><w:spacing w:after="80"/></w:pPr>'
             f'<w:r><w:rPr><w:b/><w:sz w:val="38"/><w:color w:val="1E88E5"/></w:rPr>'
@@ -76,10 +89,10 @@ class ExportService:
             r_xml = []
             for p in parts:
                 if p.startswith("**") and p.endswith("**") and len(p) >= 4:
-                    val = saxutils.escape(p[2:-2])
+                    val = xml_escape(p[2:-2])
                     r_xml.append(f'<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">{val}</w:t></w:r>')
                 else:
-                    val = saxutils.escape(p)
+                    val = xml_escape(p)
                     r_xml.append(f'<w:r><w:t xml:space="preserve">{val}</w:t></w:r>')
             return "".join(r_xml)
 
@@ -119,7 +132,7 @@ class ExportService:
                     is_header = (r_idx == 0)
                     tbl_xml.append('<w:tr>')
                     for c_val in padded:
-                        esc_c = saxutils.escape(c_val)
+                        esc_c = xml_escape(c_val)
                         shd = '<w:shd w:fill="1E88E5"/>' if is_header else ('<w:shd w:fill="F8FAFC"/>' if r_idx % 2 == 1 else '')
                         tc_r = f'<w:r><w:rPr><w:b/><w:color w:val="FFFFFF"/></w:rPr><w:t>{esc_c}</w:t></w:r>' if is_header else f'<w:r><w:t>{esc_c}</w:t></w:r>'
                         tbl_xml.append(f'<w:tc><w:tcPr>{shd}<w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar></w:tcPr><w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>{tc_r}</w:p></w:tc>')
@@ -139,7 +152,7 @@ class ExportService:
                 else:
                     in_code_block = False
                     if code_lines:
-                        c_text = saxutils.escape("\n".join(code_lines))
+                        c_text = xml_escape("\n".join(code_lines))
                         body_xml_parts.append(
                             f'<w:p><w:pPr><w:spacing w:before="60" w:after="60"/></w:pPr>'
                             f'<w:r><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/><w:sz w:val="19"/><w:color w:val="1E293B"/></w:rPr>'
@@ -165,13 +178,13 @@ class ExportService:
                 continue
 
             if s.startswith("# "):
-                val = saxutils.escape(s[2:])
+                val = xml_escape(s[2:])
                 body_xml_parts.append(f'<w:p><w:pPr><w:spacing w:before="240" w:after="80"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/><w:color w:val="1565C0"/></w:rPr><w:t>{val}</w:t></w:r></w:p>')
             elif s.startswith("## "):
-                val = saxutils.escape(s[3:])
+                val = xml_escape(s[3:])
                 body_xml_parts.append(f'<w:p><w:pPr><w:spacing w:before="180" w:after="60"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1E88E5"/></w:rPr><w:t>{val}</w:t></w:r></w:p>')
             elif s.startswith("### "):
-                val = saxutils.escape(s[4:])
+                val = xml_escape(s[4:])
                 body_xml_parts.append(f'<w:p><w:pPr><w:spacing w:before="140" w:after="40"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="24"/><w:color w:val="334155"/></w:rPr><w:t>{val}</w:t></w:r></w:p>')
             elif s.startswith(("- ", "* ", "• ")):
                 runs = format_runs(s[2:])
@@ -231,7 +244,7 @@ class ExportService:
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
 </Relationships>"""
 
-        safe_name = saxutils.escape(sheet_name[:30])
+        safe_name = xml_escape(sheet_name[:30])
         workbook = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheets>
@@ -256,7 +269,7 @@ class ExportService:
         sheet_lines.append('<row r="1">')
         for c_idx, h in enumerate(headers, 1):
             col_letter = get_col_letter(c_idx)
-            val = saxutils.escape(str(h))
+            val = xml_escape(str(h))
             sheet_lines.append(f'<c r="{col_letter}1" t="inlineStr"><is><t>{val}</t></is></c>')
         sheet_lines.append('</row>')
 
@@ -265,7 +278,7 @@ class ExportService:
             sheet_lines.append(f'<row r="{r_idx}">')
             for c_idx, cell in enumerate(row, 1):
                 col_letter = get_col_letter(c_idx)
-                val = saxutils.escape(str(cell))
+                val = xml_escape(str(cell))
                 sheet_lines.append(f'<c r="{col_letter}{r_idx}" t="inlineStr"><is><t>{val}</t></is></c>')
             sheet_lines.append('</row>')
 
