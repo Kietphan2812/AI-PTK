@@ -58,6 +58,9 @@ class DesktopAgentGUI:
         self.agent_service = AutoAgentService(ai_service=self.ai)
         self.rag_service = RAGService(ai_service=self.ai)
 
+        # Lịch sử hội thoại AI đa lượt (Multi-turn Chat Memory)
+        self.chat_history = []
+
         # Trạng thái đính kèm tệp tin / hình ảnh
         self.attached_file_path = None
         self.clipboard_image_bytes = None
@@ -210,6 +213,36 @@ class DesktopAgentGUI:
             bg="#1E293B",
         ).pack(anchor="w")
 
+        # Thanh chọn Não AI đa mô hình (Multi-Model AI Brain - Giống 100% trên Web)
+        model_bar = tk.Frame(panel, bg="#1E293B", padx=12, pady=6)
+        model_bar.pack(fill=tk.X, pady=(0, 6))
+
+        tk.Label(
+            model_bar,
+            text="🧠 Não AI:",
+            font=("Segoe UI", 9, "bold"),
+            fg="#38BDF8",
+            bg="#1E293B",
+        ).pack(side=tk.LEFT, padx=(0, 8))
+
+        self.ai_model_var = tk.StringVar(value="⚡ Google Gemini 3.5 (Mặc định - Đa năng & Nhìn ảnh)")
+        self.combo_ai_model = ttk.Combobox(
+            model_bar,
+            textvariable=self.ai_model_var,
+            state="readonly",
+            font=("Segoe UI", 9),
+            width=54,
+            values=[
+                "⚡ Google Gemini 3.5 (Mặc định - Đa năng & Nhìn ảnh)",
+                "🧠 DeepSeek R1 (Vua suy luận logic & Thuật toán)",
+                "🧠 DeepSeek V3 (Siêu thông minh & Toàn diện)",
+                "🤖 ChatGPT - GPT-4o (Đa năng & Nhìn ảnh)",
+                "🤖 ChatGPT - GPT-4o Mini (Phản hồi cực nhanh)",
+                "🎭 Claude 3.5 Sonnet (Văn phong đỉnh cao & Nhìn ảnh)",
+            ],
+        )
+        self.combo_ai_model.pack(side=tk.LEFT)
+
         # Top Attachment & Action Toolbar
         action_bar = tk.Frame(panel, bg="#0F172A")
         action_bar.pack(fill=tk.X, pady=(0, 6))
@@ -311,10 +344,17 @@ class DesktopAgentGUI:
         self.chat_stream.tag_config("action_box", foreground="#FBBF24", font=("Segoe UI", 9, "italic"))
         self.chat_stream.tag_config("attach_tag", foreground="#F59E0B", font=("Segoe UI", 9, "bold"))
 
-        # Lời chào ban đầu
+        # Lời chào ban đầu (Chuẩn nhận diện thời gian thực & thương hiệu Phan Tấn Kiệt)
+        now_dt = datetime.datetime.now()
+        days_vi = ["Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy", "Chủ Nhật"]
+        day_str = days_vi[now_dt.weekday()]
+        now_time_str = f"{day_str}, ngày {now_dt.strftime('%d/%m/%Y')}, lúc {now_dt.strftime('%H:%M')} (Giờ Việt Nam)"
         self._append_ai_message(
-            "Chào bạn! Tôi là **AI PTK** – Nền tảng trí tuệ nhân tạo toàn năng được sáng lập và phát triển bởi Kiệt (Phan Tấn Kiệt).\n"
-            "👉 Bạn có thể: Nhập câu hỏi, bấm nút Micro để nói, hoặc bấm '📁 Tải file / ảnh' / '📋 Dán ảnh từ Clipboard' để yêu cầu AI phân tích và điều khiển máy tính tự động!"
+            f"Chào bạn! Tôi là **AI PTK** – Nền tảng trí tuệ nhân tạo toàn năng được sáng lập và phát triển bởi **Kiệt (Phan Tấn Kiệt)**. 🤖✨\n\n"
+            f"Hôm nay là {now_time_str}.\n\n"
+            "Tôi luôn sẵn sàng hỗ trợ bạn giải quyết mọi công việc từ A đến Z: từ viết lách, lập kế hoạch, phân tích dữ liệu, viết code cho đến việc soạn thảo văn bản hay lập bảng tính chuyên nghiệp, hoặc điều khiển tự động hóa máy tính Windows từ xa!\n\n"
+            "Bạn cần tôi giúp gì trong ngày hôm nay? 😊\n\n"
+            "👉 Bạn có thể bấm nút 📄 Xuất Word (.docx) hoặc 📊 Xuất Excel (.xlsx) ngay bên dưới để lưu file hoàn chỉnh về máy bất cứ lúc nào!"
         )
 
         # Thanh nhập lệnh phía dưới
@@ -393,6 +433,43 @@ class DesktopAgentGUI:
         self.chat_stream.see(tk.END)
         self.chat_stream.configure(state=tk.DISABLED)
 
+    def export_message_to_docx(self, content: str):
+        try:
+            now = datetime.datetime.now()
+            ts = now.strftime("%Y%m%d_%H%M%S")
+            target_path = Path.home() / "Desktop" / f"AI_PTK_TraLoi_{ts}.docx"
+            if ExportService:
+                docx_bytes = ExportService.text_to_docx(content, title="PHẢN HỒI TỪ AI PTK")
+                with open(target_path, "wb") as f:
+                    f.write(docx_bytes)
+                os.startfile(str(target_path))
+                messagebox.showinfo("Xuất Word", f"🎉 Đã xuất thành công tài liệu Word ra Desktop:\n{target_path.name}\nvà mở Microsoft Word cho bạn!")
+        except Exception as e:
+            messagebox.showerror("Lỗi", f"Không thể xuất Word: {e}")
+
+    def export_message_to_excel(self, content: str):
+        try:
+            now = datetime.datetime.now()
+            ts = now.strftime("%Y%m%d_%H%M%S")
+            target_path = Path.home() / "Desktop" / f"AI_PTK_Bang_{ts}.xlsx"
+            if ExportService:
+                xlsx_bytes = ExportService.text_to_excel(content, title="BẢNG DỮ LIỆU AI PTK")
+                with open(target_path, "wb") as f:
+                    f.write(xlsx_bytes)
+                os.startfile(str(target_path))
+                messagebox.showinfo("Xuất Excel", f"🎉 Đã xuất thành công bảng tính Excel ra Desktop:\n{target_path.name}\nvà mở Microsoft Excel cho bạn!")
+        except Exception as e:
+            messagebox.showerror("Lỗi", f"Không thể xuất Excel: {e}")
+
+    def copy_text_to_clipboard(self, content: str):
+        try:
+            import pyperclip
+            pyperclip.copy(content)
+            messagebox.showinfo("Clipboard", "📋 Đã sao chép toàn bộ phản hồi vào bộ nhớ tạm (Clipboard)!")
+        except Exception:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(content)
+
     def _append_ai_message(self, text: str, action_text: str = None):
         self.chat_stream.configure(state=tk.NORMAL)
         now_str = datetime.datetime.now().strftime("%H:%M:%S")
@@ -400,6 +477,60 @@ class DesktopAgentGUI:
         if action_text:
             self.chat_stream.insert(tk.END, f"   ⚙️ {action_text}\n", "action_box")
         self.chat_stream.insert(tk.END, f"   {text}\n", "ai_body")
+
+        # Nút tương tác xuất Word, Excel và Sao chép giống 100% trên Web
+        btn_frame = tk.Frame(self.chat_stream, bg="#111827", pady=4)
+
+        btn_exp_word = tk.Button(
+            btn_frame,
+            text="📄 Xuất Word (.docx)",
+            font=("Segoe UI", 8, "bold"),
+            bg="#1E3A8A",
+            fg="#93C5FD",
+            activebackground="#1E40AF",
+            activeforeground="#FFFFFF",
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=8,
+            pady=2,
+            command=lambda t=text: self.export_message_to_docx(t),
+        )
+        btn_exp_word.pack(side=tk.LEFT, padx=(0, 6))
+
+        btn_exp_excel = tk.Button(
+            btn_frame,
+            text="📊 Xuất Excel (.xlsx)",
+            font=("Segoe UI", 8, "bold"),
+            bg="#064E3B",
+            fg="#6EE7B7",
+            activebackground="#065F46",
+            activeforeground="#FFFFFF",
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=8,
+            pady=2,
+            command=lambda t=text: self.export_message_to_excel(t),
+        )
+        btn_exp_excel.pack(side=tk.LEFT, padx=(0, 6))
+
+        btn_copy = tk.Button(
+            btn_frame,
+            text="📋 Sao chép text",
+            font=("Segoe UI", 8),
+            bg="#334155",
+            fg="#CBD5E1",
+            activebackground="#475569",
+            activeforeground="#FFFFFF",
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=8,
+            pady=2,
+            command=lambda t=text: self.copy_text_to_clipboard(t),
+        )
+        btn_copy.pack(side=tk.LEFT, padx=(0, 6))
+
+        self.chat_stream.window_create(tk.END, window=btn_frame)
+        self.chat_stream.insert(tk.END, "\n")
         self.chat_stream.see(tk.END)
         self.chat_stream.configure(state=tk.DISABLED)
 
@@ -455,10 +586,39 @@ class DesktopAgentGUI:
         self.badge_frame.pack_forget()
 
     def clear_chat(self):
+        self.chat_history = []
         self.chat_stream.configure(state=tk.NORMAL)
         self.chat_stream.delete("1.0", tk.END)
         self.chat_stream.configure(state=tk.DISABLED)
         self._append_ai_message("Đã xóa sạch lịch sử hội thoại. Tôi đã sẵn sàng nhận yêu cầu mới từ bạn Kiệt!")
+
+    def _is_robot_automation_command(self, cmd: str) -> bool:
+        c = (cmd or "").lower().strip()
+        # 1. Multi-app RPA or UltraViewer
+        if any(k in c for k in ["utraview", "ultraview"]) and any(k in c for k in ["copy", "mã", "dán", "dan"]):
+            return True
+        # 2. Google Workspace links
+        if any(k in c for k in ["gg ex", "gg sheet", "google sheet", "google excel", "gg doc", "gg slide"]) and any(k in c for k in ["link", "tạo 1", "tạo link", "gửi", "gủi"]):
+            return True
+        # 3. Direct URL or web messaging
+        if re.search(r'(https?://[^\s<>"]+|www\.[^\s<>"]+)', cmd) or (any(w in c for w in ["gửi tin nhắn", "gủi tin nhắn", "nhắn tin"]) and any(w in c for w in ["zalo", "facebook", "render"])):
+            return True
+        # 4. System controls
+        if any(k in c for k in ["tắt máy", "hẹn giờ", "hủy tắt máy", "khởi động lại", "restart", "khóa máy", "dọn rác", "âm lượng", "tăng loa", "giảm loa", "tắt tiếng"]):
+            return True
+        # 5. Mouse & Keyboard RPA
+        if any(k in c for k in ["click chuột", "nhấp chuột", "chụp màn hình", "chụp ảnh màn hình"]):
+            return True
+        # 6. YouTube playback
+        if any(k in c for k in ["youtube", "you tu be", "bài nhạc", "bài hát", "phát nhạc", "bật nhạc", "nghe nhạc", "phát bài", "remix", "rimex", "mv"]):
+            return True
+        # 7. App launcher
+        if any(w in c for w in ["vô", "vào", "mở", "bật", "khởi động", "chạy"]) and any(w in c for w in ["zalo", "cốc cốc", "coccoc", "chrome", "edge", "word", "excel", "ppt", "powerpoint", "notepad", "calc", "máy tính", "vscode", "code", "anydesk", "evkey", "thư mục", "explorer"]):
+            return True
+        # 8. Explicit file creation
+        if any(k in c for k in ["tạo file word", "lưu file word", "tạo file excel", "lưu file excel", "tạo bài thuyết trình", "tạo slide"]):
+            return True
+        return False
 
     def on_send_chat(self):
         cmd = self.entry_cmd.get().strip()
@@ -480,21 +640,62 @@ class DesktopAgentGUI:
 
         cur_file = self.attached_file_path
         cur_img_bytes = self.clipboard_image_bytes
-        cur_img_mime = self.clipboard_image_mime
+        cur_img_mime = self.clipboard_image_mime or "image/jpeg"
         self.clear_attachment()
+
+        # Parse selected AI model
+        model_str = self.ai_model_var.get() if hasattr(self, "ai_model_var") else ""
+        provider = "gemini"
+        model_name = None
+        if "DeepSeek R1" in model_str:
+            provider = "deepseek"
+            model_name = "deepseek-reasoner"
+        elif "DeepSeek V3" in model_str:
+            provider = "deepseek"
+            model_name = "deepseek-chat"
+        elif "GPT-4o Mini" in model_str:
+            provider = "openai"
+            model_name = "gpt-4o-mini"
+        elif "GPT-4o" in model_str:
+            provider = "openai"
+            model_name = "gpt-4o"
+        elif "Claude" in model_str:
+            provider = "claude"
+            model_name = "claude-3-5-sonnet-20241022"
 
         def _run_task():
             self.btn_send.configure(state=tk.DISABLED, text="⏳ Đang xử lý...")
             try:
-                res = self.controller.execute_command(
-                    user_command=cmd,
-                    attached_file_path=cur_file,
-                    image_bytes=cur_img_bytes,
-                    image_mime=cur_img_mime,
-                )
-                msg = res.get("message", "Đã thực thi thành công!")
-                act = res.get("action", "")
-                self.root.after(0, lambda: self._append_ai_message(msg, action_text=act))
+                # 1. Nếu là lệnh điều khiển Robot Windows (RPA)
+                if self._is_robot_automation_command(cmd) and not cur_img_bytes and not cur_file:
+                    res = self.controller.execute_command(
+                        user_command=cmd,
+                        attached_file_path=cur_file,
+                        image_bytes=cur_img_bytes,
+                        image_mime=cur_img_mime,
+                    )
+                    msg = res.get("message", "Đã thực thi thành công!")
+                    act = res.get("action", "")
+                    self.chat_history.append({"role": "user", "parts": cmd})
+                    self.chat_history.append({"role": "model", "parts": msg})
+                    self.root.after(0, lambda: self._append_ai_message(msg, action_text=act))
+                else:
+                    # 2. Nếu là câu hỏi, trò chuyện, phân tích ảnh, tư duy logic (GIỐNG 100% TRÊN WEB)
+                    history_payload = []
+                    for h in self.chat_history:
+                        history_payload.append({"role": h["role"], "parts": h["parts"]})
+
+                    reply = self.ai.chat(
+                        message=cmd,
+                        history=history_payload,
+                        provider=provider,
+                        model=model_name,
+                        image_bytes=cur_img_bytes,
+                        image_mime=cur_img_mime,
+                    )
+                    self.chat_history.append({"role": "user", "parts": cmd if cmd else "Phân tích tệp tin/ảnh"})
+                    self.chat_history.append({"role": "model", "parts": reply})
+                    self.root.after(0, lambda: self._append_ai_message(reply))
             except Exception as e:
                 self.root.after(0, lambda: self._append_ai_message(f"⚠️ Đã xảy ra lỗi: {e}"))
             finally:
