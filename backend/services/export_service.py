@@ -462,7 +462,7 @@ class ExportService:
                     "banner": RGBColor(185, 28, 28),
                     "border": RGBColor(220, 38, 38),
                     "bg": RGBColor(254, 242, 242),
-                    "text": RGBColor(220, 38, 38),
+                    "text": RGBColor(185, 28, 28),
                     "title_text": RGBColor(255, 255, 255),
                 },
                 "blue": {
@@ -486,6 +486,27 @@ class ExportService:
                     "text": RGBColor(4, 120, 87),
                     "title_text": RGBColor(255, 255, 255),
                 },
+                "purple": {
+                    "banner": RGBColor(109, 40, 217),
+                    "border": RGBColor(139, 92, 246),
+                    "bg": RGBColor(245, 243, 255),
+                    "text": RGBColor(109, 40, 217),
+                    "title_text": RGBColor(255, 255, 255),
+                },
+                "pink": {
+                    "banner": RGBColor(190, 24, 93),
+                    "border": RGBColor(236, 72, 153),
+                    "bg": RGBColor(253, 242, 248),
+                    "text": RGBColor(190, 24, 93),
+                    "title_text": RGBColor(255, 255, 255),
+                },
+                "dark": {
+                    "banner": RGBColor(15, 23, 42),
+                    "border": RGBColor(51, 65, 85),
+                    "bg": RGBColor(241, 245, 249),
+                    "text": RGBColor(15, 23, 42),
+                    "title_text": RGBColor(255, 255, 255),
+                },
             }
 
             req_col = (theme_color or "auto").lower()
@@ -498,6 +519,14 @@ class ExportService:
                 fixed_theme = color_themes["green"]
             elif any(k in req_col for k in ["xanh", "blue"]):
                 fixed_theme = color_themes["blue"]
+            elif any(k in req_col for k in ["tím", "purple"]):
+                fixed_theme = color_themes["purple"]
+            elif any(k in req_col for k in ["hồng", "pink"]):
+                fixed_theme = color_themes["pink"]
+            elif any(k in req_col for k in ["đen", "tối", "dark", "black"]):
+                fixed_theme = color_themes["dark"]
+            elif any(k in req_col for k in ["nhiều màu", "đa màu", "multi", "đỏ xanh vàng"]):
+                fixed_theme = None
 
             # Bảng màu luân phiên nếu người dùng không chỉ định màu duy nhất
             palette = [

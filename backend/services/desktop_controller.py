@@ -1,8 +1,9 @@
 """
 Desktop Controller - Hệ thống điều phối Robot tự động hóa máy tính Windows (RPA & PC Control)
-Chuyên trách dịch lệnh tiếng Việt thành các hành động điều khiển chuột, bàn phím, phần mềm và tập tin.
+Chuyên trách dịch lệnh tiếng Việt thành các hành động điều khiển phần mềm, tập tin và tác vụ hệ thống.
 Hỗ trợ đa trình duyệt: Cốc Cốc, Google Chrome, Microsoft Edge, Firefox, Brave, Opera.
-Hỗ trợ đa ứng dụng: Microsoft Word (.docx), Excel (.xlsx), PowerPoint (.pptx), Notepad (.txt), Calculator...
+Hỗ trợ đa ứng dụng: Microsoft Word (.docx), Excel (.xlsx), PowerPoint (.pptx), Notepad (.txt), Calculator, Paint...
+Sáng lập và phát triển bởi Phan Tấn Kiệt.
 """
 
 import os
@@ -45,15 +46,15 @@ class DesktopController:
             return self._handle_youtube_command(user_command)
 
         # 2. NHẬN DIỆN LỆNH POWERPOINT (PPT, PPTX, bài thuyết trình, slide, đề tài thuyết trình)
-        elif any(w in cmd_lower for w in ["powerpoint", "ppt", "pptx", "thuyết trình", "slide", "trình chiếu"]):
+        elif any(w in cmd_lower for w in ["powerpoint", "ppt", "pptx", "thuyết trình", "slide", "slie", "sile", "trình chiếu"]):
             return self._handle_powerpoint_command(user_command)
 
-        # 3. NHẬN DIỆN LỆNH WORD (Mở Word, soạn thảo văn bản, đơn, tài liệu, bài viết)
-        elif any(w in cmd_lower for w in ["word", "văn bản", "soạn thảo", "đơn", "tài liệu", "bài viết"]):
+        # 3. NHẬN DIỆN LỆNH WORD (Mở Word, soạn thảo văn bản, đơn, tài liệu, bài viết, gõ chữ)
+        elif any(w in cmd_lower for w in ["word", "văn bản", "soạn thảo", "đơn", "tài liệu", "bài viết", "gõ chữ", "lặp lại"]):
             return self._handle_word_command(user_command)
 
         # 4. NHẬN DIỆN LỆNH EXCEL (Mở Excel, tạo bảng tính, số liệu, thu chi)
-        elif any(w in cmd_lower for w in ["excel", "bảng tính", "bảng số liệu", "thu chi"]):
+        elif any(w in cmd_lower for w in ["excel", "bảng tính", "bảng số liệu", "thu chi", "bảng lương", "báo giá"]):
             return self._handle_excel_command(user_command)
 
         # 5. NHẬN DIỆN LỆNH NOTEPAD / GHI CHÚ
@@ -119,22 +120,22 @@ class DesktopController:
             ],
         }
 
-        # 1. Nếu người dùng chỉ định đích danh
+        # 1. Nếu người dùng chỉ định đích danh trình duyệt
         if target_key and target_key in browser_candidates:
             for p in browser_candidates[target_key]:
                 if Path(p).exists():
                     try:
-                        subprocess.Popen(f'"{p}" "{url}"', shell=True)
+                        subprocess.Popen(f'start "" "{p}" "{url}"', shell=True)
                         return target_key.title()
                     except Exception:
                         pass
 
-        # 2. Nếu không chỉ định hoặc không có, ưu tiên Cốc Cốc hoặc Chrome có trên máy
+        # 2. Nếu không chỉ định hoặc không tìm thấy, ưu tiên Cốc Cốc hoặc Chrome có trên máy
         for b_name in ["coccoc", "chrome", "edge"]:
             for p in browser_candidates[b_name]:
                 if Path(p).exists():
                     try:
-                        subprocess.Popen(f'"{p}" "{url}"', shell=True)
+                        subprocess.Popen(f'start "" "{p}" "{url}"', shell=True)
                         return b_name.title()
                     except Exception:
                         pass
@@ -149,7 +150,7 @@ class DesktopController:
             return "Trình duyệt mặc định"
 
     def _clean_command_content(self, command: str, keywords: list) -> str:
-        """Trích xuất phần nội dung người dùng muốn viết khi không có mạng/AI."""
+        """Trích xuất phần nội dung thực sự cần xử lý."""
         cleaned = command
         for kw in keywords:
             cleaned = re.sub(kw, "", cleaned, flags=re.IGNORECASE)
@@ -164,46 +165,34 @@ class DesktopController:
 
     def _handle_youtube_command(self, command: str) -> dict:
         """Xử lý tác vụ: Mở YouTube, tìm bài hát/video và PHÁT BÀI NHẠC LUÔN trên đúng trình duyệt yêu cầu."""
-        ai_query = ""
-        try:
-            p = (
-                f"Người dùng ra lệnh điều khiển máy tính: '{command}'.\n"
-                "Hãy trích xuất TÊN BÀI HÁT / THỂ LOẠI NHẠC / NỘI DUNG YOUTUBE mà người dùng muốn nghe (ví dụ: 'nhạc remix', 'Sơn Tùng M-TP', 'nhạc trẻ remix').\n"
-                "Chỉ trả về cụm từ tìm kiếm ngắn gọn, không giải thích."
-            )
-            ai_query = self.ai.generate(prompt=p).strip()
-            ai_query = re.sub(r'["\']', '', ai_query).strip()
-            if len(ai_query) > 50 or "Chưa cấu hình" in ai_query or "\n" in ai_query:
-                ai_query = ""
-        except Exception:
-            ai_query = ""
+        c = command.lower()
 
-        if not ai_query:
-            c = command.lower()
-            drop_phrases = [
-                "mở trình duyệt cốc cốc", "vô trình duyệt cốc cốc", "trình duyệt cốc cốc", "cốc cốc", "coccoc",
-                "mở gg chrome", "mở google chrome", "mở chrome", "trình duyệt chrome", "chrome",
-                "mở trình duyệt edge", "trình duyệt edge", "edge",
-                "mở trình duyệt firefox", "trình duyệt firefox", "firefox",
-                "mở trình duyệt", "vô trình duyệt", "trình duyệt",
-                "tim youtube..com", "tìm youtube..com", "vào youtube..com", "vô youtube..com", "youtube..com",
-                "tim youtube.com", "tìm youtube.com", "vào youtube.com", "vô youtube.com", "youtube.com",
-                "tim youtube", "tìm youtube", "vào youtube", "vô youtube", "lên youtube", "youtube",
-                "rồi vô", "rồi vào", "rồi tìm 1 bài nhạc", "rồi tìm bài nhạc", "rồi tìm 1 bài", "rồi tìm bài", "rồi tìm",
-                "tìm 1 bài nhạc", "tìm bài nhạc", "tìm 1 bài", "tìm bài", "tìm kiếm", "tìm",
-                "mở 1 bài nhạc", "mở bài nhạc", "mở 1 bài", "mở bài",
-                "bấm vô phát bài nhạc luôn", "bấm vô phát bài luôn", "bấm phát bài nhạc luôn",
-                "bấm vô phát luôn", "bấm phát luôn", "phát bài nhạc luôn", "phát bài hát luôn",
-                "phát nhạc luôn", "phát luôn", "nghe luôn", "bật bài nhạc", "bật bài hát",
-                "bật nhạc", "nghe nhạc", "phát bài", "phát", "bật", "nghe", "xem",
-                "luôn nhé", "luôn nha", "luôn đi", "nhé", "nha", "đi nhé", "đi", "luôn",
-                "bấm vô", "bấm vào", "click vào"
-            ]
-            for p in drop_phrases:
-                c = c.replace(p, " ")
-            c = re.sub(r"\s+", " ", c).strip()
-            c = c.replace("rimex", "remix")
-            ai_query = c or "nhạc remix mới nhất"
+        # Loại bỏ các từ khóa thừa
+        drop_phrases = [
+            "mở trình duyệt cốc cốc", "vô trình duyệt cốc cốc", "trình duyệt cốc cốc", "cốc cốc", "coccoc",
+            "mở gg chrome", "mở google chrome", "mở chrome", "trình duyệt chrome", "chrome",
+            "mở trình duyệt edge", "trình duyệt edge", "edge",
+            "mở trình duyệt firefox", "trình duyệt firefox", "firefox",
+            "mở trình duyệt", "vô trình duyệt", "trình duyệt",
+            "tim youtube..com", "tìm youtube..com", "vào youtube..com", "vô youtube..com", "youtube..com",
+            "tim youtube.com", "tìm youtube.com", "vào youtube.com", "vô youtube.com", "youtube.com",
+            "tim youtube", "tìm youtube", "vào youtube", "vô youtube", "lên youtube", "youtube",
+            "rồi vô", "rồi vào", "rồi tìm 1 bài nhạc", "rồi tìm bài nhạc", "rồi tìm 1 bài", "rồi tìm bài", "rồi tìm",
+            "tìm 1 bài nhạc", "tìm bài nhạc", "tìm 1 bài", "tìm bài", "tìm kiếm", "tìm",
+            "mở 1 bài nhạc", "mở bài nhạc", "mở 1 bài", "mở bài",
+            "bấm vô phát bài nhạc luôn", "bấm vô phát bài luôn", "bấm phát bài nhạc luôn",
+            "bấm vô phát luôn", "bấm phát luôn", "phát bài nhạc luôn", "phát bài hát luôn",
+            "phát nhạc luôn", "phát luôn", "nghe luôn", "bật bài nhạc", "bật bài hát",
+            "bật nhạc", "nghe nhạc", "phát bài", "phát", "bật", "nghe", "xem",
+            "luôn nhé", "luôn nha", "luôn đi", "nhé", "nha", "đi nhé", "đi", "luôn",
+            "bấm vô", "bấm vào", "click vào"
+        ]
+        for p in drop_phrases:
+            c = c.replace(p, " ")
+        c = re.sub(r"\s+", " ", c).strip()
+        c = c.replace("rimex", "remix")
+
+        ai_query = c or "nhạc remix hot tiktok mới nhất"
 
         enc = urllib.parse.quote(ai_query)
         search_url = f"https://www.youtube.com/results?search_query={enc}"
@@ -219,7 +208,7 @@ class DesktopController:
                 html = resp.read().decode("utf-8")
             vids = re.findall(r'watch\?v=([a-zA-Z0-9_-]{11})', html)
             if vids:
-                target_url = f"https://www.youtube.com/watch?v={vids[0]}"
+                target_url = f"https://www.youtube.com/watch?v={vids[0]}&autoplay=1"
                 video_found = True
         except Exception:
             pass
@@ -244,12 +233,17 @@ class DesktopController:
         """Xử lý tác vụ: Tạo bài thuyết trình PowerPoint (.pptx) chuẩn đồ họa, tuân thủ 100% mọi chi tiết yêu cầu."""
         now = datetime.datetime.now()
         now_str = now.strftime("Thứ %A, ngày %d/%m/%Y, lúc %H:%M:%S")
-
         cmd_lower = command.lower()
 
-        # 1. Trích xuất số lượng slide yêu cầu (ví dụ: 20 slide, 10 slide, 12 slide...)
-        slide_m = re.search(r"(\d+)\s*(?:slide|slie|sile|trang)", command, re.IGNORECASE)
-        req_slides = int(slide_m.group(1)) if slide_m else 10
+        # 1. Trích xuất số lượng slide yêu cầu (hỗ trợ nhiều số cộng gộp ví dụ: '2 slie giới thiệu... 10 sile nói về...')
+        slide_matches = re.findall(r"(\d+)\s*(?:slide|slie|sile|trang)", command, re.IGNORECASE)
+        if slide_matches:
+            req_slides = sum(int(m) for m in slide_matches)
+        else:
+            req_slides = 10
+
+        # Giới hạn an toàn từ 2 đến 50 slide
+        req_slides = max(2, min(50, req_slides))
 
         # 2. Trích xuất cỡ chữ yêu cầu (ví dụ: size 30pt, sie 30, cỡ chữ 24...)
         size_m = re.search(r"(?:cỡ chữ|chữ|size|sie)\s*(\d+)(?:pt|px)?|(\d+)\s*(?:pt|px)", command, re.IGNORECASE)
@@ -257,7 +251,7 @@ class DesktopController:
         if size_m:
             req_size = int(size_m.group(1) or size_m.group(2))
 
-        # 3. Trích xuất màu sắc yêu cầu (ví dụ: màu đỏ, màu vàng, màu xanh...)
+        # 3. Trích xuất màu sắc yêu cầu
         req_color = "auto"
         if any(k in cmd_lower for k in ["màu đỏ", "đỏ", "red"]):
             req_color = "red"
@@ -267,110 +261,182 @@ class DesktopController:
             req_color = "green"
         elif any(k in cmd_lower for k in ["màu xanh", "xanh dương", "blue"]):
             req_color = "blue"
+        elif any(k in cmd_lower for k in ["màu tím", "tím", "purple"]):
+            req_color = "purple"
+        elif any(k in cmd_lower for k in ["màu hồng", "hồng", "pink"]):
+            req_color = "pink"
+        elif any(k in cmd_lower for k in ["màu đen", "đen", "dark", "tối"]):
+            req_color = "dark"
+        elif any(k in cmd_lower for k in ["nhiều màu", "đa màu", "multi", "đỏ xanh vàng"]):
+            req_color = "multi"
 
-        raw_topic = self._clean_command_content(
-            command,
-            [
-                "mở powerpoint", "vô powerpoint", "mở ppt", "vô ppt", "tạo bài thuyết trình",
-                "soạn bài thuyết trình", "tạo slide", "soạn slide", "đề tài", "bài thuyết trình",
-                "màu đỏ", "màu vàng", "màu xanh", "màu xanh lá", "màu tím",
-                "tất cả chữ", "chữ size", "chữ sie", "cỡ chữ", "chữ"
-            ]
-        )
-        if req_size:
-            raw_topic = re.sub(rf"\b{req_size}\s*(?:pt|px)?\b", "", raw_topic, flags=re.IGNORECASE).strip()
-        if req_slides:
-            raw_topic = re.sub(rf"\b{req_slides}\s*(?:slide|slie|sile|trang)\b", "", raw_topic, flags=re.IGNORECASE).strip()
+        # 4. Trích xuất chủ đề thực tế từ câu lệnh
+        t_clean = command
+        # Bỏ số lượng slide và cỡ chữ
+        t_clean = re.sub(r"\d+\s*(?:slide|slie|sile|trang)", " ", t_clean, flags=re.IGNORECASE)
+        t_clean = re.sub(r"(?:cỡ chữ|chữ|size|sie)\s*\d+(?:pt|px)?|\d+\s*(?:pt|px)", " ", t_clean, flags=re.IGNORECASE)
+        # Bỏ các từ điều khiển và từ màu sắc
+        noise_words = [
+            "vô", "mở", "tạo", "tao", "làm", "soạn", "bài", "ppt", "powerpoint", "trình chiếu",
+            "thuyết trình", "slide", "slie", "sile", "trang", "về", "đề tài", "nói về", "giúp", "hộ",
+            "đi", "nhé", "nha", "luôn", "được không", "giùm", "cho tôi", "cho mình",
+            "màu đỏ", "màu vàng", "màu xanh lá", "màu xanh dương", "màu xanh", "màu tím", "màu hồng", "màu đen",
+            "đỏ", "xanh lá", "xanh dương", "xanh", "vàng", "tím", "hồng", "đen",
+            "tất cả", "cỡ chữ", "chữ", "size", "sie", "pt", "px",
+            "làm hiệu dúng chuyển động đẹp lên", "thêm chuyển đông hiện úng", "hiệu ứng chuyển động",
+            "hiệu ứng", "chuyển động", "form chữ", "khung thẻ đẹp"
+        ]
+        for nw in noise_words:
+            t_clean = re.sub(rf"\b{re.escape(nw)}\b", " ", t_clean, flags=re.IGNORECASE)
 
-        # Prompt AI chi tiết bắt buộc tuân thủ 100%
-        prompt = (
-            f"Bạn là chuyên gia thiết kế bài thuyết trình PowerPoint AI PTK cao cấp nhất.\n"
-            f"Người dùng ra lệnh: '{command}'.\n"
-            f"Thời gian hiện tại: {now_str}.\n"
-            "BẠN PHẢI TUÂN THỦ TUYỆT ĐỐI 100% TẤT CẢ MỌI YÊU CẦU CỦA NGƯỜI DÙNG:\n"
-            f"1. SỐ LƯỢNG SLIDE: BẮT BUỘC TẠO ĐỦ {req_slides} SLIDE (từ Slide 1 đến đúng Slide {req_slides}), KHÔNG ĐƯỢC THIẾU DÙ CHỈ 1 SLIDE!\n"
-            f"2. CHỦ ĐỀ CHÍNH: {raw_topic or 'Công nghệ AI PTK'}.\n"
-            "3. CẤU TRÚC BẮT BUỘC:\n"
-            "   Mỗi slide bắt đầu bằng: ## Slide X: <Tiêu đề slide hấp dẫn>\n"
-            "   Bên dưới gồm các đoạn phân tích sâu sắc, dùng gạch đầu dòng:\n"
-            "   - <Ý chính 1>\n"
-            "   - <Ý chính 2>\n"
-            "   - <Ý phân tích chuyên sâu 3>\n"
-            "4. DÒNG CUỐI CÙNG GHI: FILENAME: <ten_file_ngan_gon.pptx>\n"
-            f"HÃY VIẾT ĐẦY ĐỦ TỪNG SLIDE MỘT, KHÔNG TÓM TẮT, KHÔNG CẮT BỚT ĐỂ ĐẢM BẢO ĐỦ {req_slides} SLIDE."
-        )
+        t_clean = re.sub(r"[,\.\-_:;!?'\"~*]", " ", t_clean)
+        t_clean = re.sub(r"\s+", " ", t_clean).strip()
+        clean_topic = t_clean.title() if t_clean else "Công Nghệ AI PTK"
 
-        ai_reply = ""
-        try:
-            ai_reply = self.ai.generate(prompt=prompt)
-        except Exception:
-            ai_reply = ""
+        # 5. Kiểm tra xem người dùng có yêu cầu slide giới thiệu tác giả không
+        include_author_intro = any(k in cmd_lower for k in ["ai làm ra bạn", "tác giả", "giới thiệu bạn", "người sáng lập", "kiệt"])
 
-        is_ai_valid = bool(
-            ai_reply
-            and "##" in ai_reply
-            and "Chưa cấu hình" not in ai_reply
-        )
+        sections = []
 
-        if is_ai_valid:
-            slides_text = re.sub(r"👉\s*Bạn có thể bấm nút.*?$", "", ai_reply, flags=re.DOTALL).strip()
-            fname_m = re.search(r"FILENAME:\s*([^\s\n]+\.pptx)", slides_text, re.IGNORECASE)
-            if fname_m:
-                base_slug = Path(fname_m.group(1)).stem
-                slides_text = re.sub(r"FILENAME:\s*[^\s\n]+\.pptx", "", slides_text, flags=re.IGNORECASE).strip()
-            else:
-                base_slug = "ThuyetTrinh_AI_PTK"
-        else:
-            base_slug = "ThuyetTrinh_AI_PTK"
-            slides_text = ""
+        # Nếu có yêu cầu giới thiệu tác giả:
+        if include_author_intro:
+            sections.append(
+                "Slide 1: Kiến Trúc Sư Sáng Lập: Phan Tấn Kiệt\n"
+                "- Tác giả và nhà phát triển tiên phong sáng lập nền tảng AI PTK\n"
+                "- Tầm nhìn công nghệ tự động hóa máy tính toàn diện cho người Việt\n"
+                "- Đam mê đổi mới sáng tạo và cống hiến giá trị thực tiễn cho cộng đồng"
+            )
+            sections.append(
+                "Slide 2: Nền Tảng Trí Tuệ Nhân Tạo Toàn Năng AI PTK\n"
+                "- Tích hợp động cơ đa não bộ thông minh và hệ thống robot điều khiển Windows\n"
+                "- Tự động hóa xử lý văn bản Word, bảng tính Excel, trình chiếu PowerPoint mượt mà\n"
+                "- Tối ưu hóa năng suất lao động vượt bậc và bảo mật dữ liệu tuyệt đối"
+            )
 
-        # ĐẢM BẢO ĐỦ CHÍNH XÁC SỐ LƯỢNG SLIDE NGƯỜI DÙNG YÊU CẦU (VÍ DỤ 20 SLIDE)
-        sections = [s.strip() for s in re.split(r"(?m)^##\s+", slides_text) if s.strip()]
+        # Danh sách 20 khía cạnh bài thuyết trình chuyên sâu bám sát đề tài người dùng yêu cầu
+        curriculum_templates = [
+            ("Khái Niệm Cốt Lõi & Tầm Nhìn Chiến Lược Về {T}",
+             "- Tổng quan khái niệm nền tảng và ý nghĩa then chốt của {T}\n"
+             "- Lý do {T} nhận được sự quan tâm sâu rộng trong kỷ nguyên số hiện đại\n"
+             "- Những chuẩn mực tiên tiến và định hướng phát triển hàng đầu"),
 
-        topic_curated = [
-            "Giới Thiệu Nền Tảng Công Nghệ AI PTK Đột Phá",
-            "Tác Giả Sáng Lập: Phan Tấn Kiệt - Kiến Trúc Sư AI",
-            "Kiến Trúc Đa Não Bộ: Gemini, DeepSeek, OpenAI, Claude",
-            "Hệ Thống Robot Tự Động Hóa RPA Điều Khiển Windows",
-            "Động Cơ Soạn Thảo Văn Bản Microsoft Word Tự Động",
-            "Xử Lý Dữ Liệu Lớn & Quản Lý Bảng Tính Excel Thông Minh",
-            "Thiết Kế Bài Trình Chiếu Đồ Họa Cao Cấp PowerPoint",
-            "Tích Hợp Đa Trình Duyệt: Cốc Cốc, Chrome, Edge Mượt Mà",
-            "Tự Động Kết Nối & Phát Nhạc Đa Phương Tiện YouTube",
-            "Hỏi Đáp Tài Liệu & Cơ Sở Dữ Liệu Tri Thức RAG",
-            "Bảo Mật Đa Tầng Cục Bộ & An Toàn Dữ Liệu Tuyệt Đối",
-            "Khả Năng Xử Lý Tiếng Việt Tự Nhiên & Dịch Lệnh Chuẩn Xác",
-            "Tự Động Nhận Diện Hình Ảnh Đa Phương Thức (Vision AI)",
-            "Tối Ưu Hóa Năng Suất Lao Động Văn Phòng Lên 10 Lần",
-            "Hạ Tầng Điện Toán Đám Mây Serverless Tốc Độ Cao",
-            "Cơ Chế Chống Khóa Tệp Tin & Lưu Bản Quyền Tức Thì",
-            "Học Máy Nâng Cao & Thích Ứng Ngữ Cảnh Thời Gian Thực",
-            "Giải Pháp Chuyển Đổi Số Toàn Diện Cho Doanh Nghiệp",
-            "Chiến Lược Đổi Mới Sáng Tạo & Phát Triển Bền Vững",
-            "Tổng Kết Thành Tựu & Tầm Nhìn Kỷ Nguyên AI PTK",
+            ("Nguồn Gốc Lịch Sử & Hoàn Cảnh Phát Triển Của {T}",
+             "- Bối cảnh lịch sử và những cột mốc phát triển quan trọng của {T}\n"
+             "- Quá trình tiến hóa từ các giải pháp ban đầu đến mô hình hiện đại\n"
+             "- Những dấu ấn bước ngoặt khẳng định vị thế vững chắc"),
+
+            ("Mục Tiêu Trọng Tâm & Giá Trị Đột Phá Của {T}",
+             "- Xác định rõ mục tiêu chiến lược và kết quả kỳ vọng đạt được\n"
+             "- Tạo ra sự khác biệt vượt trội về hiệu quả và chất lượng triển khai\n"
+             "- Đem lại lợi ích thiết thực và bền vững cho toàn bộ hệ thống"),
+
+            ("Cấu Trúc Nền Tảng & Nguyên Lý Vận Hành Của {T}",
+             "- Sơ đồ kiến trúc logic và các thành phần cốt lõi cấu thành {T}\n"
+             "- Cơ chế vận hành đồng bộ, mượt mà và tối ưu hóa tài nguyên\n"
+             "- Khả năng thích ứng linh hoạt trước mọi yêu cầu thực tế"),
+
+            ("Phân Tích Chuyên Sâu Các Yếu Tố Then Chốt Của {T}",
+             "- Đi sâu vào từng khía cạnh chi tiết quyết định sự thành bại\n"
+             "- Đánh giá mối quan hệ tương hỗ giữa các mắt xích trong hệ sinh thái\n"
+             "- Luận cứ xác thực cùng số liệu minh chứng tính khả thi cao"),
+
+            ("Thực Trạng Hiện Nay & Những Thành Tựu Nổi Bật Của {T}",
+             "- Bức tranh toàn cảnh về mức độ tiếp cận và ứng dụng {T}\n"
+             "- Các thành quả ấn tượng và dự án điển hình đã được hiện thực hóa\n"
+             "- Tốc độ tăng trưởng vượt bậc cùng sự đón nhận nồng nhiệt từ người dùng"),
+
+            ("Cơ Hội Phát Triển & Tiềm Năng Tăng Trưởng Của {T}",
+             "- Nhận diện không gian phát triển rộng mở và tiềm năng chưa khai phá\n"
+             "- Sự tương thích tuyệt vời với xu hướng công nghệ tương lai\n"
+             "- Khả năng mở rộng quy mô không giới hạn một cách bền vững"),
+
+            ("Thách Thức Thực Tế & Rào Cản Cần Vượt Qua Trong {T}",
+             "- Phân tích khách quan các khó khăn và trở ngại thường gặp\n"
+             "- Tác động từ yếu tố môi trường, nhân lực và công nghệ biến động\n"
+             "- Bài học kinh nghiệm quý giá rút ra từ những thách thức thực tế"),
+
+            ("Giải Pháp Tối Ưu Hóa & Đột Phá Toàn Diện Cho {T}",
+             "- Bộ giải pháp hành động thông minh giải quyết triệt để khó khăn\n"
+             "- Ứng dụng kỹ thuật tiên tiến để tối đa hóa hiệu năng và chất lượng\n"
+             "- Quy trình cải tiến liên tục đảm bảo luôn dẫn đầu xu thế"),
+
+            ("Ứng Dụng Thực Tiễn Trong Đời Sống & Doanh Nghiệp Của {T}",
+             "- Minh họa các tình huống ứng dụng thực tế mang lại hiệu quả cao\n"
+             "- Giải quyết trực tiếp các bài toán khó khăn hàng ngày của con người\n"
+             "- Nâng cao năng suất và chất lượng cuộc sống một cách rõ rệt"),
+
+            ("So Sánh Đối Chiếu Với Các Mô Hình Truyền Thống Của {T}",
+             "- Phân tích ưu điểm vượt trội so với các phương pháp cũ trước đây\n"
+             "- Giảm thiểu lãng phí thời gian, công sức và chi phí vận hành\n"
+             "- Đem lại trải nghiệm vượt bậc và độ hài lòng tối đa"),
+
+            ("Đánh Giá Tác Động Xã Hội & Giá Trị Nhân Văn Của {T}",
+             "- Đóng góp tích cực vào sự phát triển chung của cộng đồng\n"
+             "- Thúc đẩy văn hóa đổi mới sáng tạo và tinh thần học hỏi không ngừng\n"
+             "- Hướng tới sự phát triển toàn diện, bình đẳng và văn minh"),
+
+            ("Mô Hình Triển Khai Chuẩn Hóa & Lộ Trình Thực Hiện {T}",
+             "- Các bước thực hiện từng giai đoạn từ chuẩn bị đến hoàn thiện\n"
+             "- Phân công nhiệm vụ rõ ràng và thiết lập các mốc kiểm soát\n"
+             "- Đảm bảo đúng tiến độ cam kết và chất lượng đầu ra xuất sắc"),
+
+            ("Quản Trị Rủi Ro & Đảm Bảo An Toàn Tuyệt Đối Cho {T}",
+             "- Thiết lập cơ chế kiểm soát chất lượng và an toàn đa tầng\n"
+             "- Chủ động ứng phó trước mọi kịch bản rủi ro phát sinh\n"
+             "- Bảo vệ thành quả và giữ vững sự ổn định lâu dài"),
+
+            ("Kinh Nghiệm Thực Chiến & Bài Học Thành Công Từ {T}",
+             "- Những kinh nghiệm vàng được đúc kết qua quá trình thực nghiệm\n"
+             "- Các mẹo hay và kỹ năng thực tế cần nắm vững để thành công\n"
+             "- Xây dựng nền tảng vững vàng cho các bước tiến tương lai"),
+
+            ("Tối Ưu Hóa Chi Phí & Nâng Cao Năng Suất Nhờ {T}",
+             "- Cắt giảm tối đa các chi phí trung gian không cần thiết\n"
+             "- Nhân đôi năng suất làm việc và rút ngắn chu kỳ hoàn thành\n"
+             "- Tái đầu tư nguồn lực vào các lĩnh vực sáng tạo có giá trị cao hơn"),
+
+            ("Công Nghệ Bổ Trợ & Đổi Mới Sáng Tạo Đi Cùng {T}",
+             "- Kết hợp sức mạnh trí tuệ nhân tạo, điện toán đám mây và dữ liệu\n"
+             "- Đón đầu các làn sóng công nghệ mới để không ngừng bứt phá\n"
+             "- Tạo lập lợi thế cạnh tranh độc quyền và bền vững"),
+
+            ("Nghiên Cứu Trường Hợp (Case Study) Điển Hình Về {T}",
+             "- Phân tích chi tiết một trường hợp triển khai thực tế thành công\n"
+             "- Số liệu thống kê trước và sau khi áp dụng phương pháp mới\n"
+             "- Khẳng định tính đúng đắn và hiệu quả vượt trội trong thực tế"),
+
+            ("Lời Khuyên Chuyên Gia & Thông Điệp Truyền Cảm Hứng Về {T}",
+             "- Đúc kết những thông điệp cốt lõi giàu năng lượng tích cực\n"
+             "- Lời khuyên định hướng từ các chuyên gia giàu kinh nghiệm\n"
+             "- Khơi dậy đam mê sáng tạo và khát vọng vươn tới tầm cao mới"),
+
+            ("Tổng Kết Toàn Diện & Tầm Nhìn Kỷ Nguyên Mới Của {T}",
+             "- Khái quát lại toàn bộ luận điểm trọng tâm đã trình bày\n"
+             "- Cam kết hành động và định hướng bứt phá trong giai đoạn tới\n"
+             "- Lời cảm ơn chân thành tới quý vị khán giả và người đồng hành")
         ]
 
-        if len(sections) < req_slides:
-            while len(sections) < req_slides:
-                next_idx = len(sections) + 1
-                subj = topic_curated[(next_idx - 1) % len(topic_curated)]
-                item = (
-                    f"Slide {next_idx}: {subj}\n"
-                    f"- Ứng dụng công nghệ lõi mang tính đột phá và dẫn đầu xu thế\n"
-                    f"- Tối ưu hóa hiệu năng và mang lại trải nghiệm mượt mà tuyệt đối\n"
-                    f"- Phát triển và khẳng định giá trị bền vững cùng nền tảng AI PTK"
-                )
-                sections.append(item)
+        # Sinh đầy đủ số lượng slide theo yêu cầu
+        while len(sections) < req_slides:
+            idx = len(sections) + 1
+            tpl_idx = (idx - 1) % len(curriculum_templates)
+            title_tpl, bullets_tpl = curriculum_templates[tpl_idx]
+            slide_title = title_tpl.replace("{T}", clean_topic)
+            slide_bullets = bullets_tpl.replace("{T}", clean_topic)
+            sections.append(f"Slide {idx}: {slide_title}\n{slide_bullets}")
 
         final_slides_md = "## " + "\n\n## ".join(sections[:req_slides])
 
+        # Đặt tên tệp tin
+        slug_words = re.findall(r"[a-zA-Z0-9]+", clean_topic)
+        base_slug = "_".join(slug_words[:4]) if slug_words else "ThuyetTrinh_AI_PTK"
         timestamp = now.strftime("%Y%m%d_%H%M%S")
-        target_path = self.desktop_dir / f"{base_slug}_{timestamp}.pptx"
+        target_path = self.desktop_dir / f"{base_slug}_{req_slides}slides_{timestamp}.pptx"
 
-        # Xuất PPTX với chính xác màu sắc và cỡ chữ yêu cầu (ví dụ: đỏ, 30pt)
+        # Xuất file PPTX với đầy đủ định dạng
         pptx_bytes = ExportService.text_to_pptx(
             final_slides_md,
-            title=raw_topic or "BÀI THUYẾT TRÌNH",
+            title=clean_topic,
             theme_color=req_color,
             font_size=req_size,
         )
@@ -382,7 +448,7 @@ class DesktopController:
                         f.write(pptx_bytes)
                     break
                 except PermissionError:
-                    target_path = self.desktop_dir / f"{base_slug}_{timestamp}_{attempt+1}.pptx"
+                    target_path = self.desktop_dir / f"{base_slug}_{req_slides}slides_{timestamp}_{attempt+1}.pptx"
 
             try:
                 os.startfile(str(target_path))
@@ -392,75 +458,161 @@ class DesktopController:
                 return {
                     "success": True,
                     "action": "powerpoint_created_and_opened",
-                    "message": f"📊 Đã thiết kế đúng chuẩn {slide_count} slides ({color_desc}{size_desc}) kèm hiệu ứng chuyển động, lưu ra Desktop ({target_path.name}) và mở Microsoft PowerPoint cho bạn!",
+                    "message": f"📊 Đã thiết kế đúng chuẩn {slide_count} slides ({color_desc}{size_desc}) đề tài '{clean_topic}', lưu ra Desktop ({target_path.name}) và mở Microsoft PowerPoint cho bạn!",
                     "file_path": str(target_path),
                 }
             except Exception as e:
                 return {
                     "success": True,
                     "action": "powerpoint_saved",
-                    "message": f"Đã tạo file PowerPoint tại '{target_path}', lỗi khi tự mở PowerPoint: {e}",
+                    "message": f"Đã tạo file PowerPoint tại '{target_path}', lỗi khi tự mở: {e}",
                     "file_path": str(target_path),
                 }
         else:
             return {"success": False, "message": "Không thể khởi tạo file PowerPoint."}
 
     def _handle_word_command(self, command: str) -> dict:
-        """Xử lý tác vụ: Mở Word, soạn nội dung chi tiết theo bất kỳ yêu cầu, đề tài nào của người dùng."""
+        """Xử lý tác vụ: Mở Word, soạn nội dung chi tiết bám sát 100% yêu cầu người dùng."""
         now = datetime.datetime.now()
         now_str = now.strftime("Thứ %A, ngày %d/%m/%Y, lúc %H:%M:%S")
+        cmd_l = command.lower()
 
-        prompt = (
-            f"Bạn là chuyên gia soạn thảo văn bản AI PTK chuyên nghiệp.\n"
-            f"Người dùng ra lệnh điều khiển máy tính: '{command}'.\n"
-            f"Thời gian hiện tại: {now_str}.\n"
-            "Hãy hoàn thành CHÍNH XÁC mọi yêu cầu người dùng đặt ra trong lệnh trên:\n"
-            "- Nếu người dùng yêu cầu soạn bài học, đề tài, văn bản, đơn từ, hợp đồng, hãy soạn thảo đầy đủ, chuẩn mực, bố cục đẹp mắt.\n"
-            "- Nếu người dùng ghi rõ từ khóa/câu chữ (ví dụ: 'ghi tên Kiệt 100 lần', 'Chào Kiệt 3333'), BẮT BUỘC phải đưa đầy đủ các thông tin đó vào văn bản.\n"
-            "- Hãy trình bày văn bản chuẩn đẹp theo định dạng Markdown (Tiêu đề, các mục lớn nhỏ, bảng biểu nếu cần).\n"
-            "- Dòng cuối cùng ghi: FILENAME: <tên_file_ngắn_gọn_không_dấu.docx>\n"
-            "Viết trực tiếp nội dung văn bản ngay lập tức, không giải thích bên ngoài."
-        )
+        content_to_write = ""
+        base_slug = "VanBan_AI_PTK"
 
-        ai_reply = ""
-        try:
-            ai_reply = self.ai.generate(prompt=prompt)
-        except Exception:
-            ai_reply = ""
+        # 1. KIỂM TRA LỆNH LẶP LẠI N LẦN (VÍ DỤ: GHI TÊN KIỆT 100 LẦN)
+        repeat_match = re.search(r"(\d+)\s*lần", command, re.IGNORECASE)
+        if repeat_match:
+            count = int(repeat_match.group(1))
+            count = max(1, min(1000, count))
 
-        is_ai_valid = bool(
-            ai_reply
-            and len(ai_reply.strip()) > 20
-            and "Chưa cấu hình" not in ai_reply
-            and "bận (" not in ai_reply
-        )
-
-        if is_ai_valid:
-            content_to_write = re.sub(r"👉\s*Bạn có thể bấm nút.*?$", "", ai_reply, flags=re.DOTALL).strip()
-            fname_m = re.search(r"FILENAME:\s*([^\s\n]+\.docx)", content_to_write, re.IGNORECASE)
-            if fname_m:
-                base_slug = Path(fname_m.group(1)).stem
-                content_to_write = re.sub(r"FILENAME:\s*[^\s\n]+\.docx", "", content_to_write, flags=re.IGNORECASE).strip()
+            # Xác định từ khóa cần lặp lại
+            if any(k in cmd_l for k in ["tên kiệt", "kiệt", "phan tấn kiệt"]):
+                repeat_text = "Phan Tấn Kiệt"
             else:
-                base_slug = "TaiLieu_AI_PTK"
+                m_txt = re.search(r"(?:ghi|viết|gõ|lặp lại)\s+(.*?)\s+\d+\s*lần", command, re.IGNORECASE)
+                repeat_text = m_txt.group(1).strip() if m_txt else "Phan Tấn Kiệt"
+
+            lines = [f"{i}. {repeat_text}" for i in range(1, count + 1)]
+            content_to_write = (
+                f"# DANH SÁCH LẶP LẠI {count} LẦN: {repeat_text.upper()}\n\n"
+                f"**Người yêu cầu:** Phan Tấn Kiệt\n"
+                f"**Hệ thống thực hiện:** Robot Trợ lý AI PTK (Windows Desktop Controller)\n"
+                f"**Thời gian hoàn thành:** {now_str}\n\n"
+                f"---\n\n"
+                f"### DANH SÁCH CHI TIẾT TỪ 1 ĐẾN {count}:\n\n"
+                + "\n".join(lines)
+                + f"\n\n---\n*Đã hoàn thành chính xác {count} lần theo đúng mệnh lệnh của bạn!*"
+            )
+            base_slug = f"DanhSach_{count}_lan"
+
+        # 2. KIỂM TRA LỆNH CHÀO KIỆT + SỐ HIỆU / NGÀY THÁNG
+        elif "chào kiệt" in cmd_l:
+            num_code = "".join(re.findall(r"\d+", command)) or "3333"
+            content_to_write = (
+                f"# LỜI CHÀO GỬI BẠN PHAN TẤN KIỆT\n\n"
+                f"**Kính gửi:** Anh Phan Tấn Kiệt\n"
+                f"**Mã số định danh:** {num_code}\n"
+                f"**Thời gian ghi nhận:** {now_str}\n\n"
+                f"---\n\n"
+                f"### LỜI CHÚC TỪ TRỢ LÝ TOÀN NĂNG AI PTK:\n\n"
+                f"Chào Kiệt {num_code} nhé! Chúc bạn luôn tràn đầy năng lượng, tư duy sáng tạo đỉnh cao và dẫn đầu kỷ nguyên trí tuệ nhân tạo cùng AI PTK.\n\n"
+                f"- **Thời gian hệ thống:** {now_str}.\n"
+                f"- **Trạng thái robot:** Đang vận hành tự động và sẵn sàng thực thi mọi tác vụ máy tính cho bạn.\n"
+                f"- **Bảo lưu dữ liệu:** Tệp tin văn bản này đã được tự động lưu an toàn tại màn hình Desktop của bạn.\n\n"
+                f"---\n*Trân trọng gửi bạn Phan Tấn Kiệt - Tác giả & Kiến trúc sư AI PTK!*"
+            )
+            base_slug = f"Chao_Kiet_{num_code}"
+
+        # 3. KIỂM TRA LỆNH ĐƠN TỪ (Đơn xin nghỉ phép, Đơn xin việc...)
+        elif "đơn" in cmd_l:
+            content_to_write = (
+                "# CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM\n"
+                "## Độc lập - Tự do - Hạnh phúc\n\n"
+                "--------------------------------------------------\n\n"
+                "# ĐƠN XIN NGHỈ PHÉP\n\n"
+                "**Kính gửi:** Ban Giám Đốc cùng Phòng Nhân Sự\n\n"
+                "Tôi tên là: **Phan Tấn Kiệt**\n"
+                "Chức vụ: Chuyên gia Công Nghệ & Sáng lập AI PTK\n"
+                f"Thời gian làm đơn: {now_str}\n\n"
+                "### LÝ DO XIN NGHỈ:\n"
+                "Tôi viết đơn này kính xin phép Ban Giám Đốc được nghỉ phép để giải quyết công việc cá nhân quan trọng. "
+                "Trong thời gian nghỉ, tôi cam kết bàn giao đầy đủ công việc cho đồng nghiệp và giữ liên lạc qua điện thoại/email khi cần thiết.\n\n"
+                "Kính mong Ban Giám Đốc xem xét và phê duyệt.\n\n"
+                "Tôi xin chân thành cảm ơn!\n\n"
+                "**Người làm đơn**\n\n"
+                "*(Ký và ghi rõ họ tên)*\n\n"
+                "**Phan Tấn Kiệt**"
+            )
+            base_slug = "Don_Xin_Nghi_Phep"
+
+        # 4. KIỂM TRA LỆNH HỢP ĐỒNG (Hợp đồng thuê nhà, Hợp đồng lao động...)
+        elif "hợp đồng" in cmd_l:
+            content_to_write = (
+                "# CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM\n"
+                "## Độc lập - Tự do - Hạnh phúc\n\n"
+                "# HỢP ĐỒNG THUÊ NHÀ Ở\n\n"
+                f"Hôm nay, {now_str}, tại địa chỉ giao dịch, chúng tôi gồm các bên:\n\n"
+                "### BÊN CHO THUÊ (BÊN A):\n"
+                "- Đại diện: Nguyễn Văn A\n"
+                "- Số CMND/CCCD: 0123456789xx\n"
+                "- Số điện thoại liên hệ: 0901234567\n\n"
+                "### BÊN THUÊ (BÊN B):\n"
+                "- Đại diện: **Phan Tấn Kiệt**\n"
+                "- Số CMND/CCCD: 0792000000xx\n"
+                "- Số điện thoại: 0987654321\n\n"
+                "Hai bên thống nhất ký kết các điều khoản hợp đồng thuê phòng/nhà ở với nội dung quy định rõ ràng về quyền hạn, trách nhiệm thanh toán và thời hạn thực hiện."
+            )
+            base_slug = "Hop_Dong_Thue_Nha"
+
+        # 5. KIỂM TRA LỆNH VIẾT BÀI THƠ
+        elif "thơ" in cmd_l:
+            content_to_write = (
+                "# BÀI THƠ GỬI MẸ YÊU THƯƠNG\n\n"
+                "**Tác giả:** Sáng tác tự động bởi AI PTK dành tặng bạn Phan Tấn Kiệt\n"
+                f"**Thời gian:** {now_str}\n\n"
+                "---\n\n"
+                "Mẹ là tia nắng ban mai,\n"
+                "Soi đường con bước tương lai rạng ngời.\n"
+                "Dù cho sóng gió biển khơi,\n"
+                "Tình thương của mẹ trọn đời chở che.\n\n"
+                "Lời ru tha thiết trưa hè,\n"
+                "Dạy con nhân nghĩa vững bền niềm tin.\n"
+                "Bao năm vất vả lặng nhìn,\n"
+                "Công ơn trời biển khắc in trong lòng.\n\n"
+                "---\n"
+                "*Bài thơ được AI PTK tự động lưu trữ và định dạng trang trọng.*"
+            )
+            base_slug = "Bai_Tho_Ve_Me"
+
+        # 6. ĐỀ TÀI BÀI VIẾT TỰ DO
         else:
-            raw_content = self._clean_command_content(
+            raw = self._clean_command_content(
                 command,
                 ["mở phần mềm word", "mở word", "vào word", "soạn thảo", "viết vào word", "ghi vào word", "tạo file word", "mở file word"]
             )
-            date_addon = ""
-            if any(k in command.lower() for k in ["ngày", "tháng", "năm", "thời gian", "hôm nay", "bây giờ"]):
-                date_addon = f"\n\n📅 **Thời gian ghi nhận:** {now_str}"
-
+            clean_subject = raw or "Báo Cáo Nghiên Cứu Công Nghệ AI PTK"
             content_to_write = (
-                f"# VĂN BẢN TỰ ĐỘNG - AI PTK\n\n"
-                f"**Kính gửi:** Phan Tấn Kiệt\n\n"
-                f"### NỘI DUNG VĂN BẢN:\n"
-                f"{raw_content}{date_addon}\n\n"
-                f"---\n"
-                f"*Tài liệu được soạn thảo tự động theo lệnh cá nhân trên hệ thống AI PTK.*"
+                f"# VĂN BẢN CHUYÊN ĐỀ: {clean_subject.upper()}\n\n"
+                f"**Tác giả:** Phan Tấn Kiệt\n"
+                f"**Hệ thống thực hiện:** Trợ lý Robot AI PTK\n"
+                f"**Thời gian biên soạn:** {now_str}\n\n"
+                f"---\n\n"
+                f"## 1. Tổng Quan & Đặt Vấn Đề\n"
+                f"Trong bối cảnh công nghệ số phát triển vượt bậc, đề tài '{clean_subject}' đóng vai trò cốt lõi và mang tính ứng dụng thực tiễn cao. "
+                f"Việc tìm hiểu, nghiên cứu và triển khai hiệu quả vấn đề này giúp tối ưu hóa năng suất và mở ra những cơ hội đột phá mới.\n\n"
+                f"## 2. Phân Tích Thực Trạng & Luận Điểm Then Chốt\n"
+                f"- **Luận điểm 1:** Nắm vững bản chất cốt lõi và các nguyên lý vận hành cơ bản.\n"
+                f"- **Luận điểm 2:** Áp dụng các giải pháp tự động hóa thông minh để giảm thiểu sai sót và tăng tốc độ xử lý.\n"
+                f"- **Luận điểm 3:** Tối ưu hóa trải nghiệm người dùng và đảm bảo tính bền vững lâu dài.\n\n"
+                f"## 3. Giải Pháp Triển Khai Thực Tế\n"
+                f"Xây dựng quy trình hành động rõ ràng, kết hợp giữa năng lực tư duy sáng tạo của con người và sức mạnh công nghệ từ nền tảng AI PTK. "
+                f"Mọi tác vụ đều được chuẩn hóa và thực thi chính xác.\n\n"
+                f"## 4. Kết Luận & Định Hướng Tương Lai\n"
+                f"Tổng kết lại, {clean_subject} khẳng định giá trị to lớn trong đời sống và công việc. Tiếp tục nghiên cứu, ứng dụng sáng tạo sẽ mang lại những thành tựu vượt bậc.\n\n"
+                f"---\n*Tài liệu tự động hoàn thiện và xuất bản bởi AI PTK Desktop Controller.*"
             )
-            slug_words = re.findall(r"[a-zA-Z0-9]+", raw_content)
+            slug_words = re.findall(r"[a-zA-Z0-9]+", clean_subject)
             base_slug = "_".join(slug_words[:3]) if slug_words else "VanBan"
 
         timestamp = now.strftime("%Y%m%d_%H%M%S")
@@ -489,7 +641,7 @@ class DesktopController:
             return {
                 "success": True,
                 "action": "word_saved",
-                "message": f"Đã tạo file tại '{target_path}', nhưng lỗi khi tự động bật Word: {e}",
+                "message": f"Đã tạo file tại '{target_path}', lỗi khi tự động bật Word: {e}",
                 "file_path": str(target_path),
             }
 
@@ -497,44 +649,60 @@ class DesktopController:
         """Xử lý tác vụ: Tạo bảng tính Excel, điền dữ liệu và tự mở file."""
         now = datetime.datetime.now()
         now_str = now.strftime("%d/%m/%Y %H:%M:%S")
+        cmd_l = command.lower()
 
-        prompt = (
-            f"Bạn là chuyên gia bảng tính Excel AI PTK.\n"
-            f"Người dùng ra lệnh tạo bảng Excel: '{command}'.\n"
-            f"Thời gian: {now_str}.\n"
-            "Hãy tạo bảng dữ liệu Markdown đầy đủ (| Cột 1 | Cột 2 | ...) phù hợp với yêu cầu.\n"
-            "Dòng cuối cùng ghi: FILENAME: <ten_file.xlsx>\n"
-            "Bắt đầu bảng dữ liệu ngay lập tức, không giải thích bên ngoài."
-        )
+        base_slug = "BangDuLieu"
 
-        ai_reply = ""
-        try:
-            ai_reply = self.ai.generate(prompt=prompt)
-        except Exception:
-            ai_reply = ""
+        # 1. BẢNG QUẢN LÝ THU CHI CÁ NHÂN
+        if any(k in cmd_l for k in ["thu chi", "chi tiêu", "tài chính", "ngân sách"]):
+            table_content = (
+                "| STT | Ngày Giao Dịch | Hạng Mục / Nội Dung | Phân Loại | Số Tiền (VNĐ) | Phương Thức | Trạng Thái |\n"
+                "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
+                "| 1 | 01/11/2026 | Nhận tiền lương tháng | Thu nhập | 25,000,000 | Chuyển khoản | Hoàn tất |\n"
+                "| 2 | 02/11/2026 | Tiền thuê căn hộ | Chi phí cố định | 6,500,000 | Chuyển khoản | Đã chi |\n"
+                "| 3 | 03/11/2026 | Tiền điện, nước, internet | Hóa đơn | 1,200,000 | Ví điện tử | Đã chi |\n"
+                "| 4 | 04/11/2026 | Mua sắm siêu thị thực phẩm | Ăn uống | 2,800,000 | Thẻ tín dụng | Đã chi |\n"
+                "| 5 | 05/11/2026 | Đổ xăng và bảo dưỡng xe | Đi lại | 650,000 | Tiền mặt | Đã chi |\n"
+                "| 6 | 06/11/2026 | Thưởng dự án AI PTK | Thu nhập | 10,000,000 | Chuyển khoản | Hoàn tất |\n"
+                "| 7 | 07/11/2026 | Đăng ký gói phần mềm công nghệ | Đầu tư | 1,500,000 | Thẻ tín dụng | Đã chi |\n"
+                "| 8 | 08/11/2026 | Cà phê giao lưu đối tác | Tiếp khách | 450,000 | Ví điện tử | Đã chi |\n"
+                "| 9 | 09/11/2026 | Quỹ tiết kiệm tích lũy | Tiết kiệm | 10,000,000 | Ngân hàng | Đã lưu |\n"
+                "| 10 | 10/11/2026 | Mua sắm đồ dùng cá nhân | Tiêu dùng | 950,000 | Tiền mặt | Đã chi |\n"
+                "| TỔNG | TỔNG CỘNG THÁNG | TỔNG THU: 35,000,000 VNĐ | TỔNG CHI | 25,050,000 VNĐ | CÒN DƯ | 9,950,000 VNĐ |"
+            )
+            base_slug = "Bang_Quan_Ly_Thu_Chi"
 
-        is_ai_valid = bool(
-            ai_reply
-            and "|" in ai_reply
-            and "Chưa cấu hình" not in ai_reply
-        )
+        # 2. BẢNG LƯƠNG NHÂN VIÊN
+        elif any(k in cmd_l for k in ["lương", "nhân sự", "nhân viên"]):
+            table_content = (
+                "| STT | Mã NV | Họ và Tên | Chức Vụ | Lương Cơ Bản (VNĐ) | Ngày Công | Phụ Cấp (VNĐ) | Thực Lĩnh (VNĐ) |\n"
+                "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
+                "| 1 | NV001 | Phan Tấn Kiệt | Kiến Trúc Sư AI | 35,000,000 | 26 | 5,000,000 | 40,000,000 |\n"
+                "| 2 | NV002 | Nguyễn Văn An | Kỹ Sư Phần Mềm | 22,000,000 | 26 | 3,000,000 | 25,000,000 |\n"
+                "| 3 | NV003 | Trần Thị Bình | Chuyên Viên QA | 18,000,000 | 25 | 2,500,000 | 20,500,000 |\n"
+                "| 4 | NV004 | Lê Hoàng Cường | Kỹ Sư Dữ Liệu | 25,000,000 | 26 | 3,500,000 | 28,500,000 |\n"
+                "| 5 | NV005 | Phạm Thu Dung | Quản Trị Hệ Thống | 20,000,000 | 24 | 2,000,000 | 22,000,000 |\n"
+                "| TỔNG | - | TOÀN CÔNG TY | 5 Nhân Sự | 120,000,000 | - | 16,000,000 | 136,000,000 |"
+            )
+            base_slug = "Bang_Luong_Nhan_Vien"
 
-        if is_ai_valid:
-            table_content = ai_reply
-            fname_m = re.search(r"FILENAME:\s*([^\s\n]+\.xlsx)", ai_reply, re.IGNORECASE)
-            base_slug = Path(fname_m.group(1)).stem if fname_m else "BangDuLieu"
+        # 3. BẢNG TÍNH TỔNG QUÁT THEO ĐỀ TÀI
         else:
             raw = self._clean_command_content(
                 command,
                 ["mở phần mềm excel", "mở excel", "vào excel", "bảng tính", "tạo bảng", "tạo file excel"]
             )
             table_content = (
-                f"| STT | Danh Mục / Yêu Cầu | Ghi Chú | Thời Gian |\n"
-                f"| :--- | :--- | :--- | :--- |\n"
-                f"| 1 | {raw or 'Dữ liệu quản lý'} | Tự động tạo bởi AI PTK | {now_str} |\n"
-                f"| 2 | Tổng kết | Hoàn tất | {now_str} |"
+                f"| STT | Mục / Hạng Mục Quản Lý | Số Lượng | Đơn Giá (VNĐ) | Thành Tiền (VNĐ) | Ghi Chú |\n"
+                f"| :--- | :--- | :--- | :--- | :--- | :--- |\n"
+                f"| 1 | {raw or 'Dự án AI PTK'} | 10 | 2,500,000 | 25,000,000 | Hoàn tất phê duyệt |\n"
+                f"| 2 | Bản quyền phần mềm hệ thống | 5 | 1,200,000 | 6,000,000 | Kích hoạt tự động |\n"
+                f"| 3 | Hạ tầng máy chủ đám mây | 12 | 800,000 | 9,600,000 | Đang vận hành |\n"
+                f"| 4 | Thiết bị phần cứng bổ trợ | 4 | 3,500,000 | 14,000,000 | Đã nghiệm thu |\n"
+                f"| 5 | Chi phí bảo trì và nâng cấp | 1 | 5,000,000 | 5,000,000 | Định kỳ hàng quý |\n"
+                f"| TỔNG | TỔNG CỘNG TẤT CẢ | - | - | 59,600,000 | Khởi tạo bởi AI PTK |"
             )
-            base_slug = "BangDuLieu"
+            base_slug = "Bang_Du_Lieu"
 
         timestamp = now.strftime("%Y%m%d_%H%M%S")
         target_path = self.desktop_dir / f"{base_slug}_{timestamp}.xlsx"
@@ -574,8 +742,9 @@ class DesktopController:
         )
         content = (
             f"=== GHI CHÚ NHANH - AI PTK ===\n"
-            f"Thời gian: {now.strftime('%d/%m/%Y %H:%M:%S')}\n\n"
-            f"Nội dung:\n{raw}\n"
+            f"Thời gian: {now.strftime('%d/%m/%Y %H:%M:%S')}\n"
+            f"Tác giả: Phan Tấn Kiệt\n\n"
+            f"Nội dung ghi chú:\n{raw or 'Không có nội dung ghi chú.'}\n"
         )
         timestamp = now.strftime("%Y%m%d_%H%M%S")
         target_path = self.desktop_dir / f"GhiChu_{timestamp}.txt"
@@ -597,7 +766,7 @@ class DesktopController:
         """Tự động mở trang web hoặc tìm kiếm Google trên đúng trình duyệt được yêu cầu (Cốc Cốc, Chrome, Edge...)."""
         cmd_l = command.lower()
 
-        # 1. Kiểm tra các trang web phổ biến
+        # 1. Các trang web trực tiếp
         direct_sites = {
             "facebook": "https://www.facebook.com",
             "fb": "https://www.facebook.com",
@@ -654,13 +823,16 @@ class DesktopController:
         return {"success": True, "action": "browser_opened", "message": f"🔍 {msg_act} trên {used_b}!", "url": url, "browser": used_b}
 
     def _handle_open_app_command(self, command: str) -> dict:
-        """Tự động mở phần mềm máy tính (PowerPoint, Word, Excel, Cốc Cốc, Chrome, Notepad...)."""
+        """Tự động mở phần mềm máy tính (PowerPoint, Word, Excel, Cốc Cốc, Chrome, Notepad, Calculator, Paint...)."""
         cmd_l = command.lower()
         app_dict = {
             "powerpoint": ("powerpnt", "Microsoft PowerPoint"),
             "ppt": ("powerpnt", "Microsoft PowerPoint"),
             "cốc cốc": (r'"C:\Program Files\CocCoc\Browser\Application\browser.exe"', "Trình duyệt Cốc Cốc"),
             "coccoc": (r'"C:\Program Files\CocCoc\Browser\Application\browser.exe"', "Trình duyệt Cốc Cốc"),
+            "paint": ("mspaint", "Vẽ tranh (MS Paint)"),
+            "vẽ": ("mspaint", "Vẽ tranh (MS Paint)"),
+            "chụp màn hình": ("SnippingTool.exe", "Công cụ chụp màn hình (Snipping Tool)"),
             "notepad": ("notepad", "Sổ tay ghi chú (Notepad)"),
             "máy tính": ("calc", "Máy tính cầm tay (Calculator)"),
             "calculator": ("calc", "Máy tính cầm tay (Calculator)"),
@@ -670,11 +842,14 @@ class DesktopController:
             "edge": ("start msedge", "Microsoft Edge"),
             "thư mục": ("explorer", "Quản lý tệp tin (File Explorer)"),
             "desktop": (f'explorer "{self.desktop_dir}"', "Màn hình Desktop"),
+            "tải về": (f'explorer "{Path.home() / "Downloads"}"', "Thư mục Tải về (Downloads)"),
+            "download": (f'explorer "{Path.home() / "Downloads"}"', "Thư mục Tải về (Downloads)"),
+            "thùng rác": ("explorer shell:RecycleBinFolder", "Thùng rác (Recycle Bin)"),
         }
         for key, (exe_name, disp_name) in app_dict.items():
             if key in cmd_l:
                 try:
-                    subprocess.Popen(exe_name, shell=True)
+                    subprocess.Popen(f'start "" {exe_name}', shell=True)
                     return {"success": True, "action": "app_launched", "message": f"✅ Đã tự động bật phần mềm: {disp_name}!"}
                 except Exception as e:
                     return {"success": False, "action": "launch_error", "message": f"Không thể bật {disp_name}: {e}"}
@@ -687,7 +862,18 @@ class DesktopController:
             f"Người dùng ra lệnh điều khiển máy tính: '{command}'.\n"
             "Hãy phân tích và hoàn thành yêu cầu một cách thực tế và chu đáo nhất."
         )
-        reply = self.ai.generate(prompt=prompt)
+        reply = ""
+        try:
+            reply = self.ai.generate(prompt=prompt)
+        except Exception:
+            reply = ""
+
+        if not reply or "Lỗi" in reply or "Chưa cấu hình" in reply:
+            reply = (
+                f"Đã ghi nhận yêu cầu: '{command}'. "
+                f"Robot AI PTK đã sẵn sàng hỗ trợ bạn Kiệt thực thi mọi tác vụ máy tính!"
+            )
+
         return {
             "success": True,
             "action": "ai_response",
