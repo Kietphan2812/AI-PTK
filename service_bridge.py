@@ -1,6 +1,6 @@
 """
-Service Bridge - Cầu nối thông minh hỗ trợ Multi-Model AI Engine:
-Điều phối tác vụ đến Google Gemini, DeepSeek, OpenAI ChatGPT, Anthropic Claude.
+Service Bridge - Cầu nối thông minh hỗ trợ Multi-Model & Vision:
+Điều phối tác vụ văn bản và hình ảnh đến Google Gemini, DeepSeek, OpenAI ChatGPT, Anthropic Claude.
 """
 
 import os
@@ -79,13 +79,15 @@ def is_backend_online() -> bool:
         return False
 
 
-# 1. Chat Đa Mô Hình
+# 1. Chat Đa Mô Hình & Vision
 def call_chat(
     message: str,
     history: list,
     provider: str = "gemini",
     model: str = None,
     custom_key: str = None,
+    image_bytes: bytes = None,
+    image_mime: str = "image/jpeg",
 ) -> str:
     ai, _, _, _, _ = _get_services()
     if ai:
@@ -95,6 +97,8 @@ def call_chat(
             provider=provider,
             model=model,
             custom_key=custom_key,
+            image_bytes=image_bytes,
+            image_mime=image_mime,
         )
     return "Lỗi: Không thể khởi tạo dịch vụ AI."
 

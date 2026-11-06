@@ -1,10 +1,10 @@
 """
-AI Service - Bộ điều phối Đa Não (Multi-Model AI Engine)
-Hỗ trợ: Google Gemini, DeepSeek (V3/R1), OpenAI (ChatGPT GPT-4o), Anthropic (Claude 3.5 Sonnet)
-Tất cả đều dùng chuẩn HTTP REST API của Python, không phụ thuộc thư viện ngoài nặng nề.
+AI Service - Bộ điều phối Đa Não (Multi-Model AI Engine) & Multimodal Vision
+Hỗ trợ đọc và phân tích hình ảnh (Gemini, ChatGPT GPT-4o, Claude 3.5, DeepSeek).
 """
 
 import json
+import base64
 import urllib.request
 import urllib.error
 import datetime
@@ -19,7 +19,7 @@ GEMINI_MODELS = [
 
 
 class AIService:
-    """Động cơ AI đa năng hỗ trợ Gemini, DeepSeek, OpenAI và Claude."""
+    """Động cơ AI đa năng hỗ trợ văn bản và hình ảnh."""
 
     def __init__(self):
         pass
@@ -35,16 +35,15 @@ class AIService:
         return (
             "Bạn là AI PTK – Nền tảng trí tuệ nhân tạo toàn năng được sáng lập và phát triển bởi Kiệt (Phan Tấn Kiệt).\n"
             f"THỜI GIAN HIỆN TẠI: {now_str}.\n"
-            "Tính cách & Phong cách làm việc:\n"
+            "Tính cách & Khả năng làm việc:\n"
             "1. Luôn nhận biết chính xác thứ, ngày, tháng, năm và giờ hiện tại khi được hỏi.\n"
-            "2. Thân thiện, tôn trọng và tận tâm phục vụ bạn Kiệt cũng như mọi người dùng.\n"
-            "3. Giải quyết công việc thực tế từ A đến Z: Khi được giao việc (lập kế hoạch, viết bài, viết code, phân tích dữ liệu, tóm tắt...), hãy làm việc chi tiết, thực tế và rõ ràng, không chỉ nói lý thuyết suông.\n"
-            "4. Định dạng câu trả lời đẹp mắt bằng Markdown, dùng bullet points và emoji phù hợp."
+            "2. Có khả năng nhìn và phân tích hình ảnh (đọc chữ, giải toán, nhận diện đồ vật, trích xuất dữ liệu từ ảnh).\n"
+            "3. Thân thiện, tôn trọng và tận tâm phục vụ bạn Kiệt cũng như mọi người dùng.\n"
+            "4. Giải quyết công việc thực tế từ A đến Z: Khi được giao việc (lập kế hoạch, viết bài, viết code, phân tích dữ liệu, tóm tắt...), hãy làm việc chi tiết, thực tế và rõ ràng, không chỉ nói lý thuyết suông.\n"
+            "5. Định dạng câu trả lời đẹp mắt bằng Markdown, dùng bullet points và emoji phù hợp."
         )
 
-    # -------------------------------------------------------------
-    # 1. GOOGLE GEMINI
-    # -------------------------------------------------------------
+    # 1. GOOGLE GEMINI (VISION)
     def _call_gemini(self, contents: list, custom_key: str = None, model: str = None) -> str:
         api_key = custom_key or settings.GEMINI_API_KEY
         if not api_key:
@@ -56,7 +55,6 @@ class AIService:
             "system_instruction": {"parts": [{"text": self._get_system_prompt_text()}]},
         }
         payload = json.dumps(payload_dict).encode("utf-8")
-
         models_to_try = [model] if model else GEMINI_MODELS
 
         last_error = ""
@@ -64,7 +62,7 @@ class AIService:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={api_key}"
             req = urllib.request.Request(url, data=payload, headers=headers)
             try:
-                with urllib.request.urlopen(req, timeout=30) as response:
+                with urllib.request.urlopen(req, timeout=40) as response:
                     result = json.loads(response.read().decode("utf-8"))
                     candidates = result.get("candidates", [])
                     if candidates:
@@ -82,24 +80,21 @@ class AIService:
                 last_error = str(e)
                 continue
 
-        return f"Gemini tạm thời không phản hồi ({last_error}). Vui lòng thử lại sau giây lát."
+        return f"Gemini tạm thời bận ({last_error}). Vui lòng thử lại sau giây lát."
 
-    # -------------------------------------------------------------
     # 2. DEEPSEEK (V3 / R1)
-    # -------------------------------------------------------------
     def _call_deepseek(self, messages: list, custom_key: str = None, model: str = None) -> str:
         api_key = custom_key or settings.DEEPSEEK_API_KEY
         if not api_key:
-            return "⚠️ Bạn chưa cấu hình `DEEPSEEK_API_KEY`. Bạn có thể lấy key miễn phí tại https://platform.deepseek.com/ và điền vào ô cài đặt."
+            return "⚠️ Bạn chưa cấu hình `DEEPSEEK_API_KEY`. Bạn có thể lấy key tại https://platform.deepseek.com/."
 
-        target_model = model or "deepseek-chat"  # Hoặc deepseek-reasoner
+        target_model = model or "deepseek-chat"
         url = "https://api.deepseek.com/chat/completions"
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
         }
 
-        # Thêm system prompt vào đầu danh sách messages
         full_messages = [{"role": "system", "content": self._get_system_prompt_text()}] + messages
 
         payload = json.dumps({
@@ -122,13 +117,11 @@ class AIService:
         except Exception as e:
             return f"Lỗi kết nối DeepSeek: {str(e)}"
 
-    # -------------------------------------------------------------
-    # 3. OPENAI (CHATGPT GPT-4o)
-    # -------------------------------------------------------------
+    # 3. OPENAI GPT-4o (VISION)
     def _call_openai(self, messages: list, custom_key: str = None, model: str = None) -> str:
         api_key = custom_key or settings.OPENAI_API_KEY
         if not api_key:
-            return "⚠️ Bạn chưa cấu hình `OPENAI_API_KEY`. Bạn có thể lấy key tại https://platform.openai.com/ và điền vào ô cài đặt."
+            return "⚠️ Bạn chưa cấu hình `OPENAI_API_KEY`. Bạn có thể lấy key tại https://platform.openai.com/."
 
         target_model = model or "gpt-4o"
         url = "https://api.openai.com/v1/chat/completions"
@@ -158,13 +151,11 @@ class AIService:
         except Exception as e:
             return f"Lỗi kết nối OpenAI: {str(e)}"
 
-    # -------------------------------------------------------------
-    # 4. ANTHROPIC CLAUDE (CLAUDE 3.5 SONNET)
-    # -------------------------------------------------------------
+    # 4. ANTHROPIC CLAUDE (VISION)
     def _call_claude(self, messages: list, custom_key: str = None, model: str = None) -> str:
         api_key = custom_key or settings.ANTHROPIC_API_KEY
         if not api_key:
-            return "⚠️ Bạn chưa cấu hình `ANTHROPIC_API_KEY`. Bạn có thể lấy key tại https://console.anthropic.com/ và điền vào ô cài đặt."
+            return "⚠️ Bạn chưa cấu hình `ANTHROPIC_API_KEY`. Bạn có thể lấy key tại https://console.anthropic.com/."
 
         target_model = model or "claude-3-5-sonnet-20241022"
         url = "https://api.anthropic.com/v1/messages"
@@ -174,7 +165,6 @@ class AIService:
             "anthropic-version": "2023-06-01",
         }
 
-        # Claude yêu cầu format: messages=[{"role": "user"|"assistant", "content": ...}]
         claude_msgs = []
         for m in messages:
             role = "assistant" if m.get("role") in ["model", "assistant"] else "user"
@@ -202,7 +192,7 @@ class AIService:
             return f"Lỗi kết nối Claude: {str(e)}"
 
     # -------------------------------------------------------------
-    # GIAO DIỆN CHUNG (UNIFIED DISPATCHER)
+    # GIAO DIỆN CHUNG (UNIFIED DISPATCHER HỖ TRỢ CẢ HÌNH ẢNH)
     # -------------------------------------------------------------
     def chat(
         self,
@@ -211,9 +201,14 @@ class AIService:
         provider: str = "gemini",
         model: str = None,
         custom_key: str = None,
+        image_bytes: bytes = None,
+        image_mime: str = "image/jpeg",
     ) -> str:
-        """Hàm chat đa năng điều phối sang nhà cung cấp được chọn."""
         prov = (provider or "gemini").lower()
+
+        # Nếu có đính kèm ảnh mà chọn DeepSeek (chưa có Vision), tự động dùng Gemini cho Vision
+        if image_bytes and prov == "deepseek":
+            prov = "gemini"
 
         if prov == "gemini":
             contents = []
@@ -222,27 +217,71 @@ class AIService:
                 parts = item.get("parts", "")
                 if isinstance(parts, str) and parts.strip():
                     contents.append({"role": role, "parts": [{"text": parts}]})
-            contents.append({"role": "user", "parts": [{"text": message}]})
+
+            # Phần tin nhắn hiện tại
+            user_parts = []
+            if image_bytes:
+                b64_img = base64.b64encode(image_bytes).decode("utf-8")
+                user_parts.append({
+                    "inline_data": {
+                        "mime_type": image_mime or "image/jpeg",
+                        "data": b64_img,
+                    }
+                })
+            user_parts.append({"text": message if message else "Hãy mô tả và phân tích hình ảnh này chi tiết."})
+
+            contents.append({"role": "user", "parts": user_parts})
             return self._call_gemini(contents, custom_key=custom_key, model=model)
 
-        else:
-            # Format chuẩn cho DeepSeek, OpenAI, Claude
+        elif prov == "openai":
             messages = []
             for item in history:
                 role = "user" if item.get("role") == "user" else "assistant"
                 content = item.get("parts", "")
                 if isinstance(content, str) and content.strip():
                     messages.append({"role": role, "content": content})
-            messages.append({"role": "user", "content": message})
 
-            if prov == "deepseek":
-                return self._call_deepseek(messages, custom_key=custom_key, model=model)
-            elif prov == "openai":
-                return self._call_openai(messages, custom_key=custom_key, model=model)
-            elif prov == "claude":
-                return self._call_claude(messages, custom_key=custom_key, model=model)
+            if image_bytes:
+                b64_img = base64.b64encode(image_bytes).decode("utf-8")
+                user_content = [
+                    {"type": "text", "text": message if message else "Phân tích hình ảnh này."},
+                    {"type": "image_url", "image_url": {"url": f"data:{image_mime};base64,{b64_img}"}},
+                ]
+                messages.append({"role": "user", "content": user_content})
             else:
-                return self._call_gemini(contents, custom_key=custom_key, model=model)
+                messages.append({"role": "user", "content": message})
+
+            return self._call_openai(messages, custom_key=custom_key, model=model)
+
+        elif prov == "claude":
+            messages = []
+            for item in history:
+                role = "assistant" if item.get("role") in ["model", "assistant"] else "user"
+                content = item.get("parts", "")
+                if isinstance(content, str) and content.strip():
+                    messages.append({"role": role, "content": content})
+
+            if image_bytes:
+                b64_img = base64.b64encode(image_bytes).decode("utf-8")
+                user_content = [
+                    {"type": "text", "text": message if message else "Phân tích hình ảnh này."},
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": image_mime or "image/jpeg",
+                            "data": b64_img,
+                        },
+                    },
+                ]
+                messages.append({"role": "user", "content": user_content})
+            else:
+                messages.append({"role": "user", "content": message})
+
+            return self._call_claude(messages, custom_key=custom_key, model=model)
+
+        else:
+            return self.chat(message, history, provider="gemini", custom_key=custom_key, image_bytes=image_bytes, image_mime=image_mime)
 
     def generate(
         self,
@@ -251,7 +290,6 @@ class AIService:
         model: str = None,
         custom_key: str = None,
     ) -> str:
-        """Hàm sinh nội dung đơn lẻ với nhà cung cấp được chọn."""
         return self.chat(
             message=prompt,
             history=[],
