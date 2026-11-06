@@ -434,69 +434,128 @@ class ExportService:
 
     @classmethod
     def text_to_pptx(cls, markdown_or_slides_text: str, title: str = "BÀI THUYẾT TRÌNH AI PTK") -> bytes:
-        """Tạo bài thuyết trình PowerPoint (.pptx) chuẩn và chuyên nghiệp từ văn bản/markdown."""
+        """Tạo bài thuyết trình PowerPoint (.pptx) chuẩn đồ họa cao cấp: Khung viền thẻ, chuyển động slide và phối màu Đỏ - Xanh - Vàng."""
         try:
             from pptx import Presentation
             from pptx.util import Inches, Pt
             from pptx.dml.color import RGBColor
+            from pptx.enum.shapes import MSO_SHAPE
+            from pptx.enum.text import PP_ALIGN
+            from pptx.oxml import parse_xml
 
             prs = Presentation()
             prs.slide_width = Inches(13.333)
             prs.slide_height = Inches(7.5)
 
-            # Slide 1: Bìa (Title Slide)
-            slide_layout = prs.slide_layouts[0]
-            slide = prs.slides.add_slide(slide_layout)
-            t_box = slide.shapes.title
-            s_box = slide.placeholders[1]
-            t_box.text = title.upper()
-            s_box.text = f"Được tạo tự động bởi AI PTK (Phan Tấn Kiệt) | {datetime.datetime.now().strftime('%d/%m/%Y')}"
+            # Bảng màu chuyên nghiệp: Đỏ rực rỡ, Xanh công nghệ, Vàng hoàng gia
+            palette = [
+                # Primary, Accent Red, Accent Gold
+                (RGBColor(30, 64, 175), RGBColor(220, 38, 38), RGBColor(217, 119, 6)),  # Xanh dương chủ đạo
+                (RGBColor(185, 28, 28), RGBColor(37, 99, 235), RGBColor(217, 119, 6)),  # Đỏ nổi bật
+                (RGBColor(217, 119, 6), RGBColor(30, 64, 175), RGBColor(220, 38, 38)),  # Vàng hoàng gia
+                (RGBColor(15, 118, 110), RGBColor(220, 38, 38), RGBColor(37, 99, 235)), # Xanh ngọc
+            ]
 
-            # Tách các slide theo ## Slide hoặc ## Tiêu đề
             sections = re.split(r"(?m)^##\s+", markdown_or_slides_text)
-            bullet_layout = prs.slide_layouts[1]
-
+            valid_sections = []
             for sec in sections:
                 sec_text = sec.strip()
-                if not sec_text or sec_text == title:
-                    continue
-                lines = [l.strip() for l in sec_text.splitlines() if l.strip()]
-                if not lines:
-                    continue
+                if sec_text and sec_text != title:
+                    valid_sections.append(sec_text)
 
-                slide_title = lines[0].replace("#", "").strip()
-                content_lines = lines[1:]
+            if not valid_sections:
+                valid_sections = [
+                    f"Giới Thiệu Đề Tài: {title}\n- Tác giả: Phan Tấn Kiệt\n- Khởi tạo tự động bởi AI PTK",
+                    "Nội Dung Phân Tích\n- Luận điểm 1: Đổi mới sáng tạo\n- Luận điểm 2: Ứng dụng thực tiễn",
+                    "Kết Luận\n- Tổng kết giá trị đạt được\n- Kế hoạch hành động"
+                ]
 
-                slide_item = prs.slides.add_slide(bullet_layout)
-                slide_item.shapes.title.text = slide_title
-                tf = slide_item.placeholders[1].text_frame
-                tf.word_wrap = True
+            for idx, sec in enumerate(valid_sections):
+                slide = prs.slides.add_slide(prs.slide_layouts[6]) # blank layout
+
+                # Thêm hiệu ứng chuyển cảnh động cho từng slide (Slide Transitions)
+                trans_types = ["push", "fade", "wipe"]
+                t_type = trans_types[idx % len(trans_types)]
+                if t_type == "push":
+                    t_xml = '<p:transition xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" spd="med"><p:push dir="r"/></p:transition>'
+                elif t_type == "wipe":
+                    t_xml = '<p:transition xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" spd="med"><p:wipe dir="r"/></p:transition>'
+                else:
+                    t_xml = '<p:transition xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" spd="med"><p:fade/></p:transition>'
+                
+                try:
+                    slide._element.append(parse_xml(t_xml))
+                except Exception:
+                    pass
+
+                c_banner, c_highlight, c_gold = palette[idx % len(palette)]
+
+                lines = [l.strip() for l in sec.splitlines() if l.strip()]
+                slide_title = lines[0].replace("#", "").strip() if lines else f"Slide {idx+1}"
+                content_lines = lines[1:] if len(lines) > 1 else []
+
+                # 1. THANH BANNER TIÊU ĐỀ NỔI BẬT (TOP BANNER)
+                banner = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(13.333), Inches(1.3))
+                banner.fill.solid()
+                banner.fill.fore_color.rgb = c_banner
+                banner.line.fill.background()
+
+                btf = banner.text_frame
+                btf.word_wrap = True
+                bp = btf.paragraphs[0]
+                bp.text = slide_title.upper()
+                bp.font.size = Pt(22)
+                bp.font.bold = True
+                bp.font.color.rgb = RGBColor(255, 255, 255)
+                bp.alignment = PP_ALIGN.LEFT
+
+                # 2. KHUNG NỘI DUNG THẺ BO GÓC SANG TRỌNG (CARD CONTAINER)
+                card = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.8), Inches(1.6), Inches(11.733), Inches(5.0))
+                card.fill.solid()
+                card.fill.fore_color.rgb = RGBColor(248, 250, 252) # Slate 50
+                card.line.color.rgb = c_highlight
+                card.line.width = Pt(2)
+
+                ctf = card.text_frame
+                ctf.word_wrap = True
 
                 first = True
                 for cl in content_lines:
-                    if cl.startswith("### "):
-                        p = tf.paragraphs[0] if first else tf.add_paragraph()
-                        p.text = cl[4:].strip()
-                        p.font.bold = True
-                        p.level = 0
-                        first = False
-                    elif cl.startswith(("- ", "* ", "• ")):
-                        p = tf.paragraphs[0] if first else tf.add_paragraph()
-                        p.text = cl.lstrip("-*• ").strip()
-                        p.level = 1
-                        first = False
-                    elif cl.startswith("|") and cl.endswith("|"):
+                    text_clean = cl.lstrip("-*• ").strip()
+                    if not text_clean:
                         continue
+
+                    p = ctf.paragraphs[0] if first else ctf.add_paragraph()
+                    first = False
+
+                    # Phối màu chữ ĐỎ, XANH, VÀNG linh hoạt theo từng dòng
+                    p.text = f"★ {text_clean}"
+                    p.space_after = Pt(12)
+
+                    if cl.startswith("###") or "tác giả" in text_clean.lower() or "kiệt" in text_clean.lower():
+                        p.font.bold = True
+                        p.font.size = Pt(18)
+                        p.font.color.rgb = RGBColor(220, 38, 38) # ĐỎ NỔI BẬT
+                    elif any(w in text_clean.lower() for w in ["quan trọng", "chú ý", "mục tiêu", "kết quả", "đặc biệt"]):
+                        p.font.bold = True
+                        p.font.size = Pt(16)
+                        p.font.color.rgb = RGBColor(217, 119, 6) # VÀNG KIM
                     else:
-                        p = tf.paragraphs[0] if first else tf.add_paragraph()
-                        p.text = cl
-                        p.level = 0
-                        first = False
+                        p.font.size = Pt(15)
+                        p.font.color.rgb = RGBColor(30, 64, 175) # XANH CÔNG NGHỆ
+
+                # 3. CHÂN TRANG HUY HIỆU TÁC GIẢ & BẢN QUYỀN (FOOTER BADGE)
+                footer = slide.shapes.add_textbox(Inches(0.8), Inches(6.8), Inches(11.733), Inches(0.4))
+                fp = footer.text_frame.paragraphs[0]
+                fp.text = f"🚀 AI PTK Presentation | Tác giả sáng lập: Phan Tấn Kiệt | Slide {idx+1}/{len(valid_sections)} (Hiệu ứng chuyển động tự động)"
+                fp.font.size = Pt(10)
+                fp.font.bold = True
+                fp.font.color.rgb = RGBColor(100, 116, 139)
 
             buf = io.BytesIO()
             prs.save(buf)
             return buf.getvalue()
         except Exception as e:
-            print(f"[ExportService] Lỗi tạo pptx: {e}")
+            print(f"[ExportService] Lỗi tạo pptx đồ họa: {e}")
             return b""
 

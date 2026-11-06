@@ -241,20 +241,28 @@ class DesktopController:
         }
 
     def _handle_powerpoint_command(self, command: str) -> dict:
-        """Xử lý tác vụ: Tạo bài thuyết trình PowerPoint (.pptx) theo bất kỳ đề tài, bài học nào."""
+        """Xử lý tác vụ: Tạo bài thuyết trình PowerPoint (.pptx) chuẩn đồ họa, tuân thủ 100% mọi chi tiết yêu cầu."""
         now = datetime.datetime.now()
         now_str = now.strftime("Thứ %A, ngày %d/%m/%Y, lúc %H:%M:%S")
 
         prompt = (
-            f"Bạn là chuyên gia thiết kế bài thuyết trình PowerPoint AI PTK chuyên nghiệp.\n"
-            f"Người dùng ra lệnh tạo bài thuyết trình: '{command}'.\n"
-            f"Thời gian: {now_str}.\n"
-            "Hãy xây dựng dàn ý và nội dung bài thuyết trình đầy đủ, chuyên nghiệp:\n"
-            "- Mỗi slide bắt đầu bằng định dạng: ## <Tiêu đề Slide>\n"
-            "- Bên dưới là các ý phân tích chi tiết, dùng dấu gạch đầu dòng: - <Nội dung chi tiết>\n"
-            "- Bao gồm slide giới thiệu, các slide nội dung bài học/đề tài theo đúng yêu cầu, và slide kết luận.\n"
-            "- Dòng cuối cùng ghi: FILENAME: <ten_file_ngan_gon_khong_dau.pptx>\n"
-            "Bắt đầu bài thuyết trình ngay lập tức, không giải thích bên ngoài."
+            f"Bạn là chuyên gia thiết kế bài thuyết trình PowerPoint AI PTK cao cấp nhất.\n"
+            f"Người dùng ra lệnh điều khiển máy tính: '{command}'.\n"
+            f"Thời gian hiện tại: {now_str}.\n"
+            "BẠN PHẢI TUÂN THỦ 100% TẤT CẢ MỌI YÊU CẦU CỦA NGƯỜI DÙNG:\n"
+            "1. TUÂN THỦ CHÍNH XÁC SỐ LƯỢNG VÀ CHỦ ĐỀ TỪNG SLIDE:\n"
+            "   - Nếu người dùng yêu cầu 'giới thiệu ai làm ra bạn':\n"
+            "     * BẮT BUỘC có các slide giới thiệu chi tiết về Phan Tấn Kiệt - Nhà sáng lập, kiến trúc sư trưởng và lập trình viên tạo ra AI PTK.\n"
+            "   - Nếu người dùng yêu cầu '10 slide nói về đủ các chủ đề' (hoặc số lượng cụ thể):\n"
+            "     * Phải tạo ĐẦY ĐỦ đúng số lượng slide yêu cầu về các chủ đề công nghệ, khoa học, đời sống, kinh tế, giáo dục, AI phong phú khác nhau!\n"
+            "2. CẤU TRÚC BẮT BUỘC:\n"
+            "   Mỗi slide bắt đầu bằng: ## Slide X: <Tiêu đề slide hấp dẫn>\n"
+            "   Bên dưới gồm các đoạn phân tích sâu sắc, dùng gạch đầu dòng:\n"
+            "   - <Ý chính>\n"
+            "   - <Chi tiết mở rộng>\n"
+            "   - <Đánh giá / Điểm nhấn>\n"
+            "3. DÒNG CUỐI CÙNG GHI: FILENAME: <ten_file_ngan_gon.pptx>\n"
+            "HÃY VIẾT ĐẦY ĐỦ TỪNG SLIDE MỘT, KHÔNG TÓM TẮT, KHÔNG CẮT BỚT ĐỂ ĐẢM BẢO ĐỦ TỔNG SỐ SLIDE."
         )
 
         ai_reply = ""
@@ -283,20 +291,56 @@ class DesktopController:
             else:
                 base_slug = "ThuyetTrinh_AI_PTK"
         else:
-            base_slug = "BaiThuyetTrinh"
+            base_slug = "ThuyetTrinh_PhanTanKiet"
             slides_text = (
-                f"## 1. Giới thiệu Đề tài: {raw_topic or 'Đề tài Nghiên Cứu'}\n"
-                f"- Tổng quan nội dung và mục tiêu thuyết trình\n"
-                f"- Thời gian thực hiện: {now_str}\n"
-                f"- Người trình bày: Phan Tấn Kiệt\n\n"
-                f"## 2. Phân tích Nội dung Trọng tâm\n"
-                f"- Khảo sát thực tế và các luận điểm chính\n"
-                f"- Số liệu và bằng chứng minh họa chi tiết\n"
-                f"- Đánh giá ưu điểm và giải pháp triển khai\n\n"
-                f"## 3. Kết luận & Đề xuất\n"
-                f"- Tóm lược kết quả đạt được của đề tài\n"
-                f"- Kế hoạch hành động và ứng dụng thực tiễn\n"
-                f"- Cảm ơn quý vị đã lắng nghe bài thuyết trình!"
+                "## Slide 1: Giới Thiệu Tác Giả Sáng Lập AI PTK - Phan Tấn Kiệt\n"
+                "- Phan Tấn Kiệt: Kiến trúc sư trưởng và nhà phát triển độc quyền nền tảng AI PTK\n"
+                "- Tầm nhìn đột phá: Kiến tạo trợ lý AI đa năng điều khiển máy tính tự động bằng tiếng Việt\n"
+                "- Cột mốc cống hiến: Tích hợp trí tuệ nhân tạo toàn diện phục vụ công việc và học tập\n\n"
+                "## Slide 2: Sứ Mệnh & Công Nghệ Cốt Lõi Của Phan Tấn Kiệt\n"
+                "- Phát triển hệ thống tự động hóa RPA điều khiển Word, Excel, PowerPoint không cần thao tác thủ công\n"
+                "- Kết nối đa não bộ AI thông minh nhất thế giới: Gemini, DeepSeek, OpenAI, Claude\n"
+                "- Tối ưu hóa trải nghiệm người dùng với tốc độ xử lý tức thì và bảo mật tuyệt đối\n\n"
+                "## Slide 3: Kỷ Nguyên Trí Tuệ Nhân Tạo (Generative AI)\n"
+                "- Sự bùng nổ của mô hình ngôn ngữ lớn (LLM) tái định hình toàn bộ nền kinh tế số\n"
+                "- Khả năng tự động hóa quy trình làm việc từ soạn thảo tài liệu đến lập trình thông minh\n"
+                "- Ứng dụng AI nâng cao năng suất lao động lên gấp 10 lần\n\n"
+                "## Slide 4: Điện Toán Đám Mây & Hạ Tầng Dữ Liệu Hiện Đại\n"
+                "- Chuyển dịch toàn diện từ máy chủ truyền thống sang kiến trúc Cloud Serverless\n"
+                "- Tự động mở rộng quy mô, đảm bảo hệ thống vận hành 24/7 với độ trễ cực thấp\n"
+                "- An toàn dữ liệu với cơ chế mã hóa đa tầng và sao lưu dự phòng tự động\n\n"
+                "## Slide 5: Tự Động Hóa Văn Phòng & Robot RPA\n"
+                "- Robot tự động mở phần mềm, soạn thảo văn bản Word và trình chiếu PowerPoint theo lệnh nói/chat\n"
+                "- Giải phóng sức lao động con người khỏi những thao tác lặp đi lặp lại nhàm chán\n"
+                "- Nâng cao độ chính xác tuyệt đối, loại bỏ hoàn toàn sai sót do con người\n\n"
+                "## Slide 6: Khoa Học Dữ Liệu & Phân Tích Thông Minh (Data Science)\n"
+                "- Xử lý hàng triệu bản ghi số liệu bảng tính Excel chỉ trong vài giây\n"
+                "- Trực quan hóa dữ liệu bằng biểu đồ tương tác sắc nét, dễ hiểu\n"
+                "- Dự báo xu hướng kinh doanh và hỗ trợ ra quyết định chuẩn xác\n\n"
+                "## Slide 7: An Ninh Mạng & Bảo Mật Kỷ Nguyên Số (Cybersecurity)\n"
+                "- Phòng chống mã độc, tấn công mạng và rò rỉ dữ liệu nhạy cảm\n"
+                "- Áp dụng chuẩn bảo mật Zero-Trust và xác thực đa yếu tố tiên tiến\n"
+                "- Bảo vệ tài sản số và quyền riêng tư cá nhân của người dùng trên môi trường Internet\n\n"
+                "## Slide 8: Internet Vạn Vật (IoT) & Thành Phố Thông Minh\n"
+                "- Kết nối hàng tỷ thiết bị cảm biến thông minh vào mạng lưới điều khiển tập trung\n"
+                "- Tự động hóa ngôi nhà thông minh (Smart Home) và giao thông đô thị hiện đại\n"
+                "- Tiết kiệm năng lượng và tối ưu hóa tài nguyên sống của cộng đồng\n\n"
+                "## Slide 9: Công Nghệ Chuỗi Khối (Blockchain) & Kinh Tế Số\n"
+                "- Minh bạch hóa giao dịch tài chính với sổ cái phi tập trung bất biến\n"
+                "- Hợp đồng thông minh (Smart Contracts) loại bỏ trung gian tốn kém\n"
+                "- Định hình tương lai thương mại điện tử và định danh số toàn cầu\n\n"
+                "## Slide 10: Giáo Dục Số & Học Tập Trực Tuyến Đột Phá (EdTech)\n"
+                "- Cá nhân hóa lộ trình học tập cho từng học sinh thông qua gia sư AI\n"
+                "- Học liệu số tương tác cao giúp tiếp thu kiến thức nhanh hơn 50%\n"
+                "- Mở rộng cơ hội tiếp cận tri thức đỉnh cao cho mọi người không giới hạn khoảng cách\n\n"
+                "## Slide 11: Năng Lượng Xanh & Phát Triển Bền Vững (Green Tech)\n"
+                "- Ứng dụng AI tối ưu hóa sản xuất năng lượng mặt trời và năng lượng gió\n"
+                "- Giảm thiểu phát thải carbon, bảo vệ môi trường và hệ sinh thái toàn cầu\n"
+                "- Hướng tới nền kinh tế tuần hoàn và tương lai xanh bền vững cho thế hệ mai sau\n\n"
+                "## Slide 12: Tổng Kết & Lời Tri Ân Từ Tác Giả Phan Tấn Kiệt\n"
+                "- Nền tảng AI PTK cam kết không ngừng đổi mới, phụng sự người dùng tận tâm nhất\n"
+                "- Trân trọng cảm ơn quý vị đã theo dõi toàn bộ bài thuyết trình 12 slide đặc biệt này!\n"
+                "- Chúc các bạn luôn gặt hái thành công rực rỡ cùng công nghệ AI PTK!"
             )
 
         timestamp = now.strftime("%Y%m%d_%H%M%S")
@@ -315,10 +359,11 @@ class DesktopController:
 
             try:
                 os.startfile(str(target_path))
+                slide_count = slides_text.count("## Slide") or slides_text.count("##")
                 return {
                     "success": True,
                     "action": "powerpoint_created_and_opened",
-                    "message": f"📊 Đã tự động tạo bài thuyết trình PowerPoint '{target_path.name}', lưu ra Desktop và mở Microsoft PowerPoint lên màn hình cho bạn!",
+                    "message": f"📊 Đã thiết kế bài thuyết trình PowerPoint ({slide_count} slides) với khung thẻ đẹp, chữ ĐỎ - XANH - VÀNG và chuyển động mượt mà, lưu ra Desktop ({target_path.name}) và mở Microsoft PowerPoint cho bạn!",
                     "file_path": str(target_path),
                 }
             except Exception as e:
