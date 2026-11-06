@@ -26,8 +26,16 @@ try:
 except Exception:
     HAS_GUI = False
 
-from services.export_service import ExportService
-from services.ai_service import AIService
+try:
+    from services.export_service import ExportService
+    from services.ai_service import AIService
+except ImportError:
+    try:
+        from backend.services.export_service import ExportService
+        from backend.services.ai_service import AIService
+    except ImportError:
+        ExportService = None
+        AIService = None
 
 
 class DesktopController:
