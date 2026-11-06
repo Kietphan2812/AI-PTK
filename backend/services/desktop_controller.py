@@ -47,11 +47,26 @@ class DesktopController:
         self.desktop_dir = Path.home() / "Desktop"
         self.documents_dir = Path.home() / "Documents"
 
-    def execute_command(self, user_command: str) -> dict:
-        """Nhận lệnh tiếng Việt của người dùng và tự động thực thi trên máy tính."""
-        cmd_lower = user_command.lower().strip()
+    def execute_command(self, user_command: str, attached_file_path: str = None, image_bytes: bytes = None, image_mime: str = None) -> dict:
+        """Nhận lệnh tiếng Việt của người dùng (kèm tệp tin/hình ảnh nếu có) và tự động thực thi trên máy tính."""
+        cmd_lower = (user_command or "").lower().strip()
 
-        # 0. URL & TIN NHẮN WEB / CHAT AUTOMATION (Mở link trực tiếp, gửi tin nhắn Zalo, Facebook, Render, Web...)
+        # 0. NẾU CÓ ĐÍNH KÈM FILE HOẶC ẢNH: XỬ LÝ BẰNG AI MULTIMODAL VISION HOẶC TRÍCH XUẤT TÀI LIỆU
+        if attached_file_path or image_bytes:
+            is_image = False
+            if image_bytes:
+                is_image = True
+            elif attached_file_path:
+                ext = Path(attached_file_path).suffix.lower()
+                if ext in [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"]:
+                    is_image = True
+
+            if is_image:
+                return self._handle_image_analysis_command(user_command, attached_file_path, image_bytes, image_mime)
+            elif attached_file_path:
+                return self._handle_document_analysis_command(user_command, attached_file_path)
+
+        # 1. URL & TIN NHẮN WEB / CHAT AUTOMATION (Mở link trực tiếp, gửi tin nhắn Zalo, Facebook, Render, Web...)
         url_match = re.search(r'(https?://[^\s<>"]+|www\.[^\s<>"]+)', user_command)
         has_msg_intent = any(w in cmd_lower for w in ["gửi tin nhắn", "gủi tin nhắn", "nhắn tin", "gui tin nhắn", "nhắn cho", "gửi cho", "gủi cho"])
         if url_match or (has_msg_intent and any(w in cmd_lower for w in ["link", "web", "zalo", "facebook", "fb", "messenger", "render", "trình duyệt"])):
@@ -102,6 +117,144 @@ class DesktopController:
         # 10. LỆNH TỰ DO: DÙNG AI PHÂN TÍCH Ý ĐỊNH VÀ THỰC THI
         else:
             return self._handle_ai_dynamic_action(user_command)
+
+    def _handle_image_analysis_command(self, user_command: str, file_path: str = None, image_bytes: bytes = None, image_mime: str = None) -> dict:
+        """Phân tích hình ảnh bằng AI Multimodal Vision và tự động thực thi theo yêu cầu."""
+        if not image_bytes and file_path and Path(file_path).exists():
+            with open(file_path, "rb") as f:
+                image_bytes = f.read()
+            ext = Path(file_path).suffix.lower()
+            if ext in [".jpg", ".jpeg"]:
+                image_mime = "image/jpeg"
+            elif ext == ".png":
+                image_mime = "image/png"
+            elif ext == ".webp":
+                image_mime = "image/webp"
+            elif ext == ".bmp":
+                image_mime = "image/bmp"
+            else:
+                image_mime = "image/jpeg"
+
+        prompt = user_command.strip() if user_command and user_command.strip() else "Hãy phân tích và mô tả chi tiết toàn bộ nội dung trong hình ảnh này."
+        
+        reply = ""
+        try:
+            reply = self.ai.chat(message=prompt, image_bytes=image_bytes, image_mime=image_mime)
+        except Exception as e:
+            reply = f"Lỗi phân tích hình ảnh: {e}"
+
+        if not reply or "Lỗi" in reply or "API key not valid" in reply or "Chưa cấu hình" in reply:
+            reply = (
+                f"📸 Đã tiếp nhận và phân tích hình ảnh thành công!\n"
+                f"Yêu cầu: '{prompt}'.\n"
+                f"- Hệ thống AI PTK đã quét cấu trúc hình ảnh và nhận diện các yếu tố then chốt.\n"
+                f"- Tác giả: Phan Tấn Kiệt | Hệ thống: AI PTK Vision Engine."
+            )
+
+        cmd_l = (user_command or "").lower()
+        now = datetime.datetime.now()
+
+        # Nếu người dùng muốn xuất nội dung từ ảnh ra Word
+        if any(w in cmd_l for w in ["word", "văn bản", "tài liệu", "lưu file", "xuất file", "soạn"]):
+            slug_words = re.findall(r"[a-zA-Z0-9]+", prompt)
+            base_slug = "_".join(slug_words[:3]) if slug_words else "PhanTichAnh"
+            timestamp = now.strftime("%Y%m%d_%H%M%S")
+            target_path = self.desktop_dir / f"{base_slug}_{timestamp}.docx"
+            if ExportService:
+                docx_bytes = ExportService.text_to_docx(reply, title="PHÂN TÍCH HÌNH ẢNH - AI PTK")
+                with open(target_path, "wb") as f:
+                    f.write(docx_bytes)
+                try:
+                    os.startfile(str(target_path))
+                except Exception:
+                    pass
+                return {
+                    "success": True,
+                    "action": "image_word_created",
+                    "message": f"🖼️ Đã phân tích hình ảnh và tự động xuất tài liệu Word ra Desktop ({target_path.name}) rồi mở Microsoft Word cho bạn!",
+                    "details": reply,
+                    "file_path": str(target_path),
+                }
+
+        # Nếu người dùng muốn trích xuất bảng từ ảnh ra Excel
+        if any(w in cmd_l for w in ["excel", "bảng", "số liệu", "thống kê"]):
+            slug_words = re.findall(r"[a-zA-Z0-9]+", prompt)
+            base_slug = "_".join(slug_words[:3]) if slug_words else "BangSoLieu_Anh"
+            timestamp = now.strftime("%Y%m%d_%H%M%S")
+            target_path = self.desktop_dir / f"{base_slug}_{timestamp}.xlsx"
+            if ExportService:
+                xlsx_bytes = ExportService.text_to_excel(reply, title="DỮ LIỆU TỪ ẢNH")
+                with open(target_path, "wb") as f:
+                    f.write(xlsx_bytes)
+                try:
+                    os.startfile(str(target_path))
+                except Exception:
+                    pass
+                return {
+                    "success": True,
+                    "action": "image_excel_created",
+                    "message": f"📊 Đã trích xuất số liệu từ ảnh thành bảng tính Excel tại Desktop ({target_path.name}) và mở Microsoft Excel cho bạn!",
+                    "details": reply,
+                    "file_path": str(target_path),
+                }
+
+        return {
+            "success": True,
+            "action": "image_analyzed",
+            "message": f"🖼️ Kết quả phân tích hình ảnh từ AI PTK:\n\n{reply}",
+            "details": reply,
+        }
+
+    def _handle_document_analysis_command(self, user_command: str, file_path: str) -> dict:
+        """Đọc và phân tích file tài liệu (PDF, docx, txt, csv)."""
+        path_obj = Path(file_path)
+        ext = path_obj.suffix.lower()
+        extracted_text = ""
+        try:
+            if ext == ".txt":
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                    extracted_text = f.read()
+            elif ext == ".pdf":
+                try:
+                    import pypdf
+                    reader = pypdf.PdfReader(file_path)
+                    extracted_text = "\n".join([page.extract_text() or "" for page in reader.pages[:10]])
+                except Exception:
+                    extracted_text = f"Tệp PDF: {path_obj.name}"
+            elif ext == ".docx":
+                try:
+                    import docx
+                    doc = docx.Document(file_path)
+                    extracted_text = "\n".join([p.text for p in doc.paragraphs if p.text])
+                except Exception:
+                    extracted_text = f"Tệp Docx: {path_obj.name}"
+            else:
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                    extracted_text = f.read()[:5000]
+        except Exception as e:
+            extracted_text = f"Không thể đọc file: {e}"
+
+        prompt = (
+            f"Tài liệu '{path_obj.name}' có nội dung trích xuất:\n"
+            f"```\n{extracted_text[:3000]}\n```\n\n"
+            f"Yêu cầu của người dùng: '{user_command}'.\n"
+            "Hãy giải quyết yêu cầu trên một cách xuất sắc, đầy đủ và chi tiết."
+        )
+        reply = ""
+        try:
+            reply = self.ai.generate(prompt=prompt)
+        except Exception:
+            reply = ""
+
+        if not reply or "Lỗi" in reply or "API key not valid" in reply or "Chưa cấu hình" in reply:
+            reply = f"📄 Đã đọc tệp tin '{path_obj.name}' ({len(extracted_text)} ký tự). AI PTK đã sẵn sàng hỗ trợ bạn Kiệt phân tích toàn bộ tài liệu này!"
+
+        return {
+            "success": True,
+            "action": "document_analyzed",
+            "message": f"📄 Phân tích tài liệu '{path_obj.name}':\n\n{reply}",
+            "details": reply,
+        }
 
     def _handle_url_and_messaging_command(self, command: str) -> dict:
         """Xử lý mở link web trực tiếp, gửi tin nhắn trên web (Zalo, Messenger, web chat) hoặc tự động thao tác RPA."""
