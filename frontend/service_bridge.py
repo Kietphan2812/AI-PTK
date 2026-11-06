@@ -189,3 +189,4 @@ def call_tools_process(tool_type: str, text: str, target_lang: str = "English", 
     if tools:
         return tools.process(tool_type, text, target_lang, code_lang)
     return "Lỗi xử lý công cụ."
+
