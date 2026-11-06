@@ -33,12 +33,14 @@ _tools_service = None
 
 def _get_services():
     global _ai_service, _rag_service, _writer_service, _data_service, _tools_service
-    if _ai_service is None:
-        try:
-            from services.ai_service import AIService
-            _ai_service = AIService()
-        except Exception as e:
-            print(f"[Bridge] AI Service error: {e}")
+    import importlib
+    try:
+        import services.ai_service
+        importlib.reload(services.ai_service)
+        from services.ai_service import AIService
+        _ai_service = AIService()
+    except Exception as e:
+        print(f"[Bridge] AI Service error: {e}")
 
     if _rag_service is None and _ai_service:
         try:
@@ -88,9 +90,14 @@ def call_chat(
     custom_key: str = None,
     image_bytes: bytes = None,
     image_mime: str = "image/jpeg",
+    *args,
+    **kwargs,
 ) -> str:
-    ai, _, _, _, _ = _get_services()
-    if ai:
+    try:
+        import importlib
+        import services.ai_service
+        importlib.reload(services.ai_service)
+        ai = services.ai_service.AIService()
         return ai.chat(
             message=message,
             history=history,
@@ -99,8 +106,27 @@ def call_chat(
             custom_key=custom_key,
             image_bytes=image_bytes,
             image_mime=image_mime,
+            *args,
+            **kwargs,
         )
-    return "Lỗi: Không thể khởi tạo dịch vụ AI."
+    except Exception as e:
+        try:
+            ai, _, _, _, _ = _get_services()
+            if ai:
+                return ai.chat(
+                    message=message,
+                    history=history,
+                    provider=provider,
+                    model=model,
+                    custom_key=custom_key,
+                    image_bytes=image_bytes,
+                    image_mime=image_mime,
+                    *args,
+                    **kwargs,
+                )
+        except Exception as fallback_err:
+            return f"Lỗi xử lý AI: {str(fallback_err)}"
+        return f"Lỗi kết nối AI Service: {str(e)}"
 
 
 # 2. RAG

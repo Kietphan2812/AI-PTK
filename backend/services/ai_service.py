@@ -11,10 +11,11 @@ import datetime
 from config import settings
 
 GEMINI_MODELS = [
-    "gemini-3.5-flash-lite",
-    "gemini-3.5-flash",
     "gemini-flash-lite-latest",
-    "gemma-4-26b-a4b-it",
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash-lite",
+    "gemini-flash-latest",
+    "gemini-3.5-flash",
 ]
 
 
@@ -192,18 +193,40 @@ class AIService:
             return f"Lỗi kết nối Claude: {str(e)}"
 
     # -------------------------------------------------------------
-    # GIAO DIỆN CHUNG (UNIFIED DISPATCHER HỖ TRỢ CẢ HÌNH ẢNH)
+    # GIAO DIỆN CHUNG (UNIFIED DISPATCHER HỖ TRỢ CẢ HÌNH ẢNH & ĐA NÃO)
     # -------------------------------------------------------------
     def chat(
         self,
-        message: str,
-        history: list,
+        message: str = "",
+        history: list = None,
         provider: str = "gemini",
         model: str = None,
         custom_key: str = None,
         image_bytes: bytes = None,
         image_mime: str = "image/jpeg",
+        *args,
+        **kwargs,
     ) -> str:
+        """Hàm chat đa năng điều phối sang nhà cung cấp được chọn (Gemini, DeepSeek, OpenAI, Claude)."""
+        if history is None:
+            history = []
+        if image_bytes is None and "image_bytes" in kwargs:
+            image_bytes = kwargs["image_bytes"]
+        if "image_mime" in kwargs:
+            image_mime = kwargs["image_mime"]
+        if "provider" in kwargs:
+            provider = kwargs["provider"]
+        if not model and "model" in kwargs:
+            model = kwargs["model"]
+        if not custom_key and "custom_key" in kwargs:
+            custom_key = kwargs["custom_key"]
+
+        # Chuẩn hóa image_mime
+        if image_mime in ["image/jpg", "jpg"]:
+            image_mime = "image/jpeg"
+        elif not image_mime:
+            image_mime = "image/jpeg"
+
         prov = (provider or "gemini").lower()
 
         # Nếu có đính kèm ảnh mà chọn DeepSeek (chưa có Vision), tự động dùng Gemini cho Vision
@@ -224,7 +247,7 @@ class AIService:
                 b64_img = base64.b64encode(image_bytes).decode("utf-8")
                 user_parts.append({
                     "inline_data": {
-                        "mime_type": image_mime or "image/jpeg",
+                        "mime_type": image_mime,
                         "data": b64_img,
                     }
                 })
@@ -269,7 +292,7 @@ class AIService:
                         "type": "image",
                         "source": {
                             "type": "base64",
-                            "media_type": image_mime or "image/jpeg",
+                            "media_type": image_mime,
                             "data": b64_img,
                         },
                     },
@@ -281,7 +304,16 @@ class AIService:
             return self._call_claude(messages, custom_key=custom_key, model=model)
 
         else:
-            return self.chat(message, history, provider="gemini", custom_key=custom_key, image_bytes=image_bytes, image_mime=image_mime)
+            return self.chat(
+                message=message,
+                history=history,
+                provider="gemini",
+                custom_key=custom_key,
+                image_bytes=image_bytes,
+                image_mime=image_mime,
+                *args,
+                **kwargs,
+            )
 
     def generate(
         self,
@@ -289,6 +321,8 @@ class AIService:
         provider: str = "gemini",
         model: str = None,
         custom_key: str = None,
+        *args,
+        **kwargs,
     ) -> str:
         return self.chat(
             message=prompt,
@@ -296,4 +330,6 @@ class AIService:
             provider=provider,
             model=model,
             custom_key=custom_key,
+            *args,
+            **kwargs,
         )
