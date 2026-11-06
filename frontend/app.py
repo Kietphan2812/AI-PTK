@@ -162,7 +162,7 @@ with col3:
     )
 
 st.write("")
-col4, col5 = st.columns(2)
+col4, col5, col6 = st.columns(3)
 
 with col4:
     st.markdown(
@@ -188,11 +188,23 @@ with col5:
         unsafe_allow_html=True,
     )
 
+with col6:
+    st.markdown(
+        """
+        <div class="feature-card">
+            <div class="feature-icon">🤖</div>
+            <div class="feature-title">AI Auto-Agent</div>
+            <div class="feature-desc">Nhập mục tiêu bất kỳ: AI tự động phân rã nhiệm vụ, tự tính toán, chạy code và tự động đóng gói file Word & Excel hoàn chỉnh.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 st.write("---")
 st.markdown(
     """
     <div style="text-align: center; color: #888; font-size: 0.9rem;">
-        Phát triển cho dự án <b>AI PTK</b> • Sử dụng FastAPI, Streamlit, ChromaDB & Google Gemini 2.0 Flash
+        Phát triển cho nền tảng <b>AI PTK</b> bởi Phan Tấn Kiệt • Tích hợp Google Gemini, DeepSeek R1/V3, ChatGPT GPT-4o, Claude 3.5 Sonnet & Auto-Agent
     </div>
     """,
     unsafe_allow_html=True,

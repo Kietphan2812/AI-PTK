@@ -229,3 +229,26 @@ def export_to_excel(markdown_text_or_df, title: str = "Dữ liệu AI PTK") -> b
         except Exception as e2:
             return f"Lỗi: {e2}".encode("utf-8")
 
+
+# 7. AI Auto-Agent (Tự động hóa công việc từ A đến Z)
+def call_agent_execute(goal: str, provider: str = "gemini", model: str = None, custom_key: str = None) -> dict:
+    try:
+        import importlib
+        import services.agent_service
+        importlib.reload(services.agent_service)
+        ai_svc, _, _, _, _ = _get_services()
+        agent = services.agent_service.AutoAgentService(ai_service=ai_svc)
+        return agent.execute_goal(goal=goal, provider=provider, model=model, custom_key=custom_key)
+    except Exception as e:
+        print(f"[Bridge] Agent execution error: {e}")
+        return {
+            "goal": goal,
+            "plan": f"Lỗi điều phối: {e}",
+            "result_markdown": f"Không thể hoàn thành tự động hóa: {e}",
+            "code_output": "",
+            "docx_bytes": b"",
+            "xlsx_bytes": b"",
+            "filename_base": "Loi_Agent",
+        }
+
+
