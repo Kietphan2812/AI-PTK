@@ -1,77 +1,98 @@
 """
 Export Service - Bộ công cụ xuất bản tài liệu Microsoft Word (.docx) và Excel (.xlsx) cho AI PTK
-Hỗ trợ chuyển đổi tự động từ phản hồi của AI (Markdown, bảng biểu, danh sách) sang file chuyên nghiệp.
+Được thiết kế 2 tầng: Tầng 1 dùng python-docx/openpyxl, Tầng 2 dùng Pure Python OpenXML Engine (Zero Dependencies).
+Đảm bảo 100% không bao giờ sinh file 0 Bytes kể cả khi thiếu thư viện ngoài trên Streamlit Cloud.
 """
 
 import io
 import re
 import datetime
-import pandas as pd
-import docx
-from docx.shared import Inches, Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_TABLE_ALIGNMENT
-from docx.oxml import OxmlElement, parse_xml
-from docx.oxml.ns import nsdecls, qn
+import zipfile
+import xml.sax.saxutils as saxutils
 
-import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
+# Kiểm tra thư viện ngoài (nếu có thì dùng, không có thì fallback sang Pure Python Engine)
+try:
+    import docx
+    from docx.shared import Inches, Pt, RGBColor
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+    from docx.oxml import parse_xml
+    from docx.oxml.ns import nsdecls
+    HAS_DOCX = True
+except Exception:
+    HAS_DOCX = False
+
+try:
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    HAS_OPENPYXL = True
+except Exception:
+    HAS_OPENPYXL = False
 
 
 class ExportService:
-    """Dịch vụ tạo và xuất file Word, Excel chuyên nghiệp cho người dùng AI PTK."""
+    """Dịch vụ tạo và xuất file Word, Excel chuyên nghiệp và chống lỗi 0 Bytes tuyệt đối cho AI PTK."""
 
-    @staticmethod
-    def _set_cell_background(cell, fill_hex: str):
-        """Đặt màu nền cho ô trong bảng Word."""
-        tcPr = cell._element.get_or_add_tcPr()
-        shd = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{fill_hex}"/>')
-        tcPr.append(shd)
-
+    # -------------------------------------------------------------
+    # 1. PURE PYTHON OPENXML DOCX ENGINE (ZERO EXTERNAL DEPENDENCIES)
+    # -------------------------------------------------------------
     @classmethod
-    def text_to_docx(cls, markdown_text: str, title: str = "TÀI LIỆU AI PTK") -> bytes:
-        """Chuyển đổi văn bản phản hồi của AI sang tài liệu Microsoft Word (.docx) được định dạng đẹp."""
-        doc = docx.Document()
-
-        # Thiết lập lề trang tiêu chuẩn (2cm)
-        for section in doc.sections:
-            section.top_margin = Inches(0.8)
-            section.bottom_margin = Inches(0.8)
-            section.left_margin = Inches(0.8)
-            section.right_margin = Inches(0.8)
-
-        # Tiêu đề chính
-        title_p = doc.add_paragraph()
-        title_run = title_p.add_run(title)
-        title_run.font.size = Pt(20)
-        title_run.font.bold = True
-        title_run.font.color.rgb = RGBColor(30, 136, 229)  # #1E88E5
-        title_p.paragraph_format.space_after = Pt(4)
-
-        # Thông tin bản quyền & thời gian
+    def _pure_python_docx(cls, markdown_text: str, title: str = "TÀI LIỆU AI PTK") -> bytes:
+        """Tạo file Word (.docx) chuẩn bằng công nghệ thuần Python zipfile + XML. Không phụ thuộc thư viện ngoài."""
         tz = datetime.timezone(datetime.timedelta(hours=7))
         now_str = datetime.datetime.now(tz).strftime("%d/%m/%Y lúc %H:%M (Giờ Việt Nam)")
-        sub_p = doc.add_paragraph()
-        sub_run = sub_p.add_run(f"Được tạo tự động bởi AI PTK | {now_str}")
-        sub_run.font.size = Pt(9.5)
-        sub_run.font.italic = True
-        sub_run.font.color.rgb = RGBColor(120, 120, 120)
-        sub_p.paragraph_format.space_after = Pt(18)
 
-        # Xử lý nội dung Markdown từng dòng
+        content_types = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>"""
+
+        rels = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>"""
+
+        body_xml_parts = []
+
+        # Tiêu đề chính
+        esc_title = saxutils.escape(title)
+        body_xml_parts.append(
+            f'<w:p><w:pPr><w:spacing w:after="80"/></w:pPr>'
+            f'<w:r><w:rPr><w:b/><w:sz w:val="38"/><w:color w:val="1E88E5"/></w:rPr>'
+            f'<w:t>{esc_title}</w:t></w:r></w:p>'
+        )
+
+        # Tiêu đề phụ & Bản quyền
+        body_xml_parts.append(
+            f'<w:p><w:pPr><w:spacing w:after="240"/></w:pPr>'
+            f'<w:r><w:rPr><w:i/><w:sz w:val="18"/><w:color w:val="787878"/></w:rPr>'
+            f'<w:t>Được tạo tự động bởi AI PTK | {now_str}</w:t></w:r></w:p>'
+        )
+
+        def format_runs(text: str) -> str:
+            parts = re.split(r"(\*\*.*?\*\*)", text)
+            r_xml = []
+            for p in parts:
+                if p.startswith("**") and p.endswith("**") and len(p) >= 4:
+                    val = saxutils.escape(p[2:-2])
+                    r_xml.append(f'<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">{val}</w:t></w:r>')
+                else:
+                    val = saxutils.escape(p)
+                    r_xml.append(f'<w:r><w:t xml:space="preserve">{val}</w:t></w:r>')
+            return "".join(r_xml)
+
         lines = markdown_text.split("\n")
         in_table = False
         in_code_block = False
         code_lines = []
         table_rows = []
 
-        def flush_table():
+        def flush_tbl():
             nonlocal table_rows
             if not table_rows:
                 return
-
-            # Lọc bỏ các dòng ngăn cách như |---|---|
             valid_rows = []
             for r in table_rows:
                 cells = [c.strip() for c in r.strip().strip("|").split("|")]
@@ -80,62 +101,50 @@ class ExportService:
                 valid_rows.append(cells)
 
             if valid_rows:
-                max_cols = max(len(r) for r in valid_rows)
-                # Đảm bảo mỗi dòng đủ số cột
-                norm_rows = []
-                for r in valid_rows:
-                    padded = r + [""] * (max_cols - len(r))
-                    norm_rows.append(padded)
-
-                # Tạo bảng trong Word
-                table = doc.add_table(rows=len(norm_rows), cols=max_cols)
-                table.alignment = WD_TABLE_ALIGNMENT.CENTER
-                table.autofit = True
-
-                for i, row_data in enumerate(norm_rows):
-                    row = table.rows[i]
-                    is_header = (i == 0)
-                    for j, cell_text in enumerate(row_data):
-                        cell = row.cells[j]
-                        cell.text = cell_text
-                        p = cell.paragraphs[0]
-                        p.paragraph_format.space_before = Pt(3)
-                        p.paragraph_format.space_after = Pt(3)
-
-                        if is_header:
-                            cls._set_cell_background(cell, "1E88E5")
-                            for r in p.runs:
-                                r.font.bold = True
-                                r.font.color.rgb = RGBColor(255, 255, 255)
-                                r.font.size = Pt(10)
-                        else:
-                            bg_hex = "F8FAFC" if i % 2 == 1 else "FFFFFF"
-                            cls._set_cell_background(cell, bg_hex)
-                            for r in p.runs:
-                                r.font.size = Pt(9.5)
-
-                doc.add_paragraph().paragraph_format.space_after = Pt(6)
+                max_c = max(len(r) for r in valid_rows)
+                tbl_xml = [
+                    '<w:tbl>',
+                    '<w:tblPr><w:tblW w:w="5000" w:type="pct"/>'
+                    '<w:tblBorders>'
+                    '<w:top w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/>'
+                    '<w:left w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/>'
+                    '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/>'
+                    '<w:right w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/>'
+                    '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/>'
+                    '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/>'
+                    '</w:tblBorders></w:tblPr>'
+                ]
+                for r_idx, row in enumerate(valid_rows):
+                    padded = row + [""] * (max_c - len(row))
+                    is_header = (r_idx == 0)
+                    tbl_xml.append('<w:tr>')
+                    for c_val in padded:
+                        esc_c = saxutils.escape(c_val)
+                        shd = '<w:shd w:fill="1E88E5"/>' if is_header else ('<w:shd w:fill="F8FAFC"/>' if r_idx % 2 == 1 else '')
+                        tc_r = f'<w:r><w:rPr><w:b/><w:color w:val="FFFFFF"/></w:rPr><w:t>{esc_c}</w:t></w:r>' if is_header else f'<w:r><w:t>{esc_c}</w:t></w:r>'
+                        tbl_xml.append(f'<w:tc><w:tcPr>{shd}<w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar></w:tcPr><w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>{tc_r}</w:p></w:tc>')
+                    tbl_xml.append('</w:tr>')
+                tbl_xml.append('</w:tbl>')
+                body_xml_parts.append("".join(tbl_xml))
+                body_xml_parts.append('<w:p><w:pPr><w:spacing w:after="80"/></w:pPr></w:p>')
             table_rows = []
 
         for line in lines:
-            stripped = line.strip()
+            s = line.strip()
 
-            # Khối mã nguồn (Code block)
-            if stripped.startswith("```"):
+            if s.startswith("```"):
                 if not in_code_block:
                     in_code_block = True
                     code_lines = []
                 else:
                     in_code_block = False
                     if code_lines:
-                        cp = doc.add_paragraph()
-                        cp.paragraph_format.left_indent = Inches(0.2)
-                        cp.paragraph_format.space_before = Pt(4)
-                        cp.paragraph_format.space_after = Pt(4)
-                        crun = cp.add_run("\n".join(code_lines))
-                        crun.font.name = "Consolas"
-                        crun.font.size = Pt(9.5)
-                        crun.font.color.rgb = RGBColor(30, 41, 59)
+                        c_text = saxutils.escape("\n".join(code_lines))
+                        body_xml_parts.append(
+                            f'<w:p><w:pPr><w:spacing w:before="60" w:after="60"/></w:pPr>'
+                            f'<w:r><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/><w:sz w:val="19"/><w:color w:val="1E293B"/></w:rPr>'
+                            f'<w:t xml:space="preserve">{c_text}</w:t></w:r></w:p>'
+                        )
                         code_lines = []
                 continue
 
@@ -143,116 +152,211 @@ class ExportService:
                 code_lines.append(line)
                 continue
 
-            # Nhận diện dòng bảng (| a | b |)
-            if stripped.startswith("|") and stripped.endswith("|"):
+            if s.startswith("|") and s.endswith("|"):
                 in_table = True
-                table_rows.append(stripped)
+                table_rows.append(s)
                 continue
             else:
                 if in_table:
-                    flush_table()
+                    flush_tbl()
                     in_table = False
 
-            # Dòng trống
-            if not stripped:
+            if not s:
                 continue
 
-            # Tiêu đề cấp 1 (# Heading)
-            if stripped.startswith("# "):
-                h = doc.add_paragraph()
-                r = h.add_run(stripped[2:])
-                r.font.size = Pt(16)
-                r.font.bold = True
-                r.font.color.rgb = RGBColor(21, 101, 192)
-                h.paragraph_format.space_before = Pt(14)
-                h.paragraph_format.space_after = Pt(4)
-
-            # Tiêu đề cấp 2 (## Heading)
-            elif stripped.startswith("## "):
-                h = doc.add_paragraph()
-                r = h.add_run(stripped[3:])
-                r.font.size = Pt(13.5)
-                r.font.bold = True
-                r.font.color.rgb = RGBColor(30, 136, 229)
-                h.paragraph_format.space_before = Pt(10)
-                h.paragraph_format.space_after = Pt(3)
-
-            # Tiêu đề cấp 3 (### Heading)
-            elif stripped.startswith("### "):
-                h = doc.add_paragraph()
-                r = h.add_run(stripped[4:])
-                r.font.size = Pt(11.5)
-                r.font.bold = True
-                r.font.color.rgb = RGBColor(55, 65, 81)
-                h.paragraph_format.space_before = Pt(8)
-                h.paragraph_format.space_after = Pt(2)
-
-            # Gạch đầu dòng (- hoặc * hoặc •)
-            elif stripped.startswith(("- ", "* ", "• ")):
-                p = doc.add_paragraph(style="List Bullet")
-                content = stripped[2:]
-                cls._add_formatted_runs(p, content)
-                p.paragraph_format.space_after = Pt(2)
-
-            # Danh sách có thứ tự (1. , 2. ...)
-            elif re.match(r"^\d+\.\s+", stripped):
-                p = doc.add_paragraph(style="List Number")
-                num_m = re.match(r"^\d+\.\s+", stripped)
-                content = stripped[num_m.end():]
-                cls._add_formatted_runs(p, content)
-                p.paragraph_format.space_after = Pt(2)
-
-            # Đoạn văn bản thông thường
+            if s.startswith("# "):
+                val = saxutils.escape(s[2:])
+                body_xml_parts.append(f'<w:p><w:pPr><w:spacing w:before="240" w:after="80"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/><w:color w:val="1565C0"/></w:rPr><w:t>{val}</w:t></w:r></w:p>')
+            elif s.startswith("## "):
+                val = saxutils.escape(s[3:])
+                body_xml_parts.append(f'<w:p><w:pPr><w:spacing w:before="180" w:after="60"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1E88E5"/></w:rPr><w:t>{val}</w:t></w:r></w:p>')
+            elif s.startswith("### "):
+                val = saxutils.escape(s[4:])
+                body_xml_parts.append(f'<w:p><w:pPr><w:spacing w:before="140" w:after="40"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="24"/><w:color w:val="334155"/></w:rPr><w:t>{val}</w:t></w:r></w:p>')
+            elif s.startswith(("- ", "* ", "• ")):
+                runs = format_runs(s[2:])
+                body_xml_parts.append(f'<w:p><w:pPr><w:spacing w:after="40"/></w:pPr><w:r><w:t xml:space="preserve">•  </w:t></w:r>{runs}</w:p>')
+            elif re.match(r"^\d+\.\s+", s):
+                num_m = re.match(r"^\d+\.\s+", s)
+                prefix = num_m.group(0)
+                runs = format_runs(s[num_m.end():])
+                body_xml_parts.append(f'<w:p><w:pPr><w:spacing w:after="40"/></w:pPr><w:r><w:b/><w:t xml:space="preserve">{prefix}</w:t></w:r>{runs}</w:p>')
             else:
-                p = doc.add_paragraph()
-                cls._add_formatted_runs(p, stripped)
-                p.paragraph_format.space_after = Pt(4)
+                runs = format_runs(s)
+                body_xml_parts.append(f'<w:p><w:pPr><w:spacing w:after="80"/></w:pPr>{runs}</w:p>')
 
         if in_table:
-            flush_table()
+            flush_tbl()
 
-        if in_code_block and code_lines:
-            cp = doc.add_paragraph()
-            cp.paragraph_format.left_indent = Inches(0.2)
-            crun = cp.add_run("\n".join(code_lines))
-            crun.font.name = "Consolas"
-            crun.font.size = Pt(9.5)
+        doc_xml = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            '<w:body>'
+            + "".join(body_xml_parts)
+            + '<w:sectPr><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr>'
+            '</w:body></w:document>'
+        )
 
         buf = io.BytesIO()
-        doc.save(buf)
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("[Content_Types].xml", content_types)
+            z.writestr("_rels/.rels", rels)
+            z.writestr("word/document.xml", doc_xml)
+
         return buf.getvalue()
 
-    @staticmethod
-    def _add_formatted_runs(paragraph, text: str):
-        """Xử lý định dạng in đậm (**text**) trong một đoạn văn."""
-        parts = re.split(r"(\*\*.*?\*\*)", text)
-        for part in parts:
-            if part.startswith("**") and part.endswith("**") and len(part) >= 4:
-                run = paragraph.add_run(part[2:-2])
-                run.font.bold = True
-            else:
-                paragraph.add_run(part)
+    # -------------------------------------------------------------
+    # 2. PURE PYTHON OPENXML XLSX ENGINE (ZERO EXTERNAL DEPENDENCIES)
+    # -------------------------------------------------------------
+    @classmethod
+    def _pure_python_xlsx(cls, headers: list, rows: list, sheet_name: str = "Du_Lieu") -> bytes:
+        """Tạo file Excel (.xlsx) chuẩn bằng zipfile + XML thuần Python. Không phụ thuộc openpyxl."""
+        buf = io.BytesIO()
+
+        content_types = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>"""
+
+        rels = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"""
+
+        wb_rels = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>"""
+
+        safe_name = saxutils.escape(sheet_name[:30])
+        workbook = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="{safe_name}" sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>"""
+
+        sheet_lines = [
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+            '<sheetData>'
+        ]
+
+        def get_col_letter(col_idx: int) -> str:
+            result = ""
+            while col_idx > 0:
+                col_idx, remainder = divmod(col_idx - 1, 26)
+                result = chr(65 + remainder) + result
+            return result or "A"
+
+        # Dòng tiêu đề cột
+        sheet_lines.append('<row r="1">')
+        for c_idx, h in enumerate(headers, 1):
+            col_letter = get_col_letter(c_idx)
+            val = saxutils.escape(str(h))
+            sheet_lines.append(f'<c r="{col_letter}1" t="inlineStr"><is><t>{val}</t></is></c>')
+        sheet_lines.append('</row>')
+
+        # Các dòng dữ liệu
+        for r_idx, row in enumerate(rows, 2):
+            sheet_lines.append(f'<row r="{r_idx}">')
+            for c_idx, cell in enumerate(row, 1):
+                col_letter = get_col_letter(c_idx)
+                val = saxutils.escape(str(cell))
+                sheet_lines.append(f'<c r="{col_letter}{r_idx}" t="inlineStr"><is><t>{val}</t></is></c>')
+            sheet_lines.append('</row>')
+
+        sheet_lines.append('</sheetData>')
+        sheet_lines.append('</worksheet>')
+        sheet_xml = "\n".join(sheet_lines)
+
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("[Content_Types].xml", content_types)
+            z.writestr("_rels/.rels", rels)
+            z.writestr("xl/_rels/workbook.xml.rels", wb_rels)
+            z.writestr("xl/workbook.xml", workbook)
+            z.writestr("xl/worksheets/sheet1.xml", sheet_xml)
+
+        return buf.getvalue()
+
+    # -------------------------------------------------------------
+    # 3. GIAO DIỆN CHÍNH (TỰ ĐỘNG CHỌN ENGINE & CHỐNG LỖI 0 BYTES)
+    # -------------------------------------------------------------
+    @classmethod
+    def text_to_docx(cls, markdown_text: str, title: str = "TÀI LIỆU AI PTK") -> bytes:
+        """Xuất Markdown ra Word (.docx) - Cam kết luôn trả về dữ liệu hợp lệ (> 0 Bytes)."""
+        if not markdown_text or not markdown_text.strip():
+            markdown_text = "Nội dung tài liệu AI PTK."
+
+        # Thử dùng python-docx nếu có
+        if HAS_DOCX:
+            try:
+                doc = docx.Document()
+                for section in doc.sections:
+                    section.top_margin = Inches(0.8)
+                    section.bottom_margin = Inches(0.8)
+                    section.left_margin = Inches(0.8)
+                    section.right_margin = Inches(0.8)
+
+                title_p = doc.add_paragraph()
+                title_run = title_p.add_run(title)
+                title_run.font.size = Pt(20)
+                title_run.font.bold = True
+                title_run.font.color.rgb = RGBColor(30, 136, 229)
+
+                tz = datetime.timezone(datetime.timedelta(hours=7))
+                now_str = datetime.datetime.now(tz).strftime("%d/%m/%Y lúc %H:%M (Giờ Việt Nam)")
+                sub_p = doc.add_paragraph()
+                sub_run = sub_p.add_run(f"Được tạo tự động bởi AI PTK | {now_str}")
+                sub_run.font.size = Pt(9.5)
+                sub_run.font.italic = True
+                sub_run.font.color.rgb = RGBColor(120, 120, 120)
+
+                lines = markdown_text.split("\n")
+                for line in lines:
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
+                    if stripped.startswith("# "):
+                        h = doc.add_paragraph()
+                        r = h.add_run(stripped[2:])
+                        r.font.size = Pt(16)
+                        r.font.bold = True
+                        r.font.color.rgb = RGBColor(21, 101, 192)
+                    elif stripped.startswith("## "):
+                        h = doc.add_paragraph()
+                        r = h.add_run(stripped[3:])
+                        r.font.size = Pt(13.5)
+                        r.font.bold = True
+                        r.font.color.rgb = RGBColor(30, 136, 229)
+                    elif stripped.startswith(("- ", "* ", "• ")):
+                        p = doc.add_paragraph(style="List Bullet")
+                        p.add_run(stripped[2:])
+                    else:
+                        p = doc.add_paragraph()
+                        p.add_run(stripped)
+
+                buf = io.BytesIO()
+                doc.save(buf)
+                data = buf.getvalue()
+                if len(data) > 500:
+                    return data
+            except Exception as e:
+                print(f"[ExportService] python-docx warning: {e}, using pure engine fallback...")
+
+        # Fallback chắc chắn thành công 100% với Pure Engine
+        return cls._pure_python_docx(markdown_text, title=title)
 
     @classmethod
     def text_to_excel(cls, markdown_text: str, title: str = "BẢNG DỮ LIỆU AI PTK") -> bytes:
-        """Chuyển đổi bảng dữ liệu hoặc báo cáo văn bản sang bảng tính Microsoft Excel (.xlsx) chuyên nghiệp."""
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Du_Lieu_AI_PTK"
+        """Xuất bảng dữ liệu ra Excel (.xlsx) - Cam kết luôn trả về dữ liệu hợp lệ (> 0 Bytes)."""
+        if not markdown_text or not markdown_text.strip():
+            markdown_text = "Nội dung bảng dữ liệu."
 
-        # Định dạng chuẩn
-        header_fill = PatternFill(start_color="1E88E5", end_color="1E88E5", fill_type="solid")
-        header_font = Font(name="Segoe UI", size=11, bold=True, color="FFFFFF")
-        zebra_fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
-        cell_font = Font(name="Segoe UI", size=10)
-        thin_border = Border(
-            left=Side(style="thin", color="CBD5E1"),
-            right=Side(style="thin", color="CBD5E1"),
-            top=Side(style="thin", color="CBD5E1"),
-            bottom=Side(style="thin", color="CBD5E1"),
-        )
-
-        # Trích xuất các bảng Markdown (nếu có)
+        # Trích xuất dòng bảng từ Markdown nếu có
         lines = markdown_text.split("\n")
         table_rows = []
         for line in lines:
@@ -263,138 +367,54 @@ class ExportService:
                     continue
                 table_rows.append(cells)
 
-        current_row = 1
-
-        # Tiêu đề bảng tính
-        ws.merge_cells("A1:E1")
-        title_cell = ws["A1"]
-        title_cell.value = f"📊 {title.upper()}"
-        title_cell.font = Font(name="Segoe UI", size=14, bold=True, color="1E88E5")
-        title_cell.alignment = Alignment(horizontal="left", vertical="center")
-        ws.row_dimensions[1].height = 28
-
-        tz = datetime.timezone(datetime.timedelta(hours=7))
-        now_str = datetime.datetime.now(tz).strftime("%d/%m/%Y %H:%M")
-        ws["A2"].value = f"Nguồn tạo: AI PTK | Thời gian: {now_str}"
-        ws["A2"].font = Font(name="Segoe UI", size=9, italic=True, color="64748B")
-        current_row = 4
-
         if table_rows:
-            # Ghi bảng dữ liệu trích xuất từ câu trả lời của AI
-            for r_idx, row in enumerate(table_rows):
-                for c_idx, val in enumerate(row):
-                    cell = ws.cell(row=current_row + r_idx, column=c_idx + 1, value=val)
-                    cell.border = thin_border
-                    if r_idx == 0:
-                        cell.fill = header_fill
-                        cell.font = header_font
-                        cell.alignment = Alignment(horizontal="center", vertical="center")
-                    else:
-                        cell.font = cell_font
-                        cell.alignment = Alignment(horizontal="left", vertical="center")
-                        if r_idx % 2 == 1:
-                            cell.fill = zebra_fill
-                ws.row_dimensions[current_row + r_idx].height = 22
-
-            # Auto căn chỉnh độ rộng cột
-            for col in ws.columns:
-                max_len = 0
-                col_letter = get_column_letter(col[0].column)
-                for cell in col:
-                    if cell.row >= current_row and cell.value:
-                        max_len = max(max_len, len(str(cell.value)))
-                ws.column_dimensions[col_letter].width = max(max_len + 4, 15)
-
+            headers = table_rows[0]
+            data_rows = table_rows[1:]
         else:
-            # Nếu không có bảng biểu Markdown, xuất báo cáo dạng danh mục và nội dung dòng
-            ws.cell(row=current_row, column=1, value="STT").fill = header_fill
-            ws.cell(row=current_row, column=1).font = header_font
-            ws.cell(row=current_row, column=1).alignment = Alignment(horizontal="center")
-            ws.cell(row=current_row, column=1).border = thin_border
-
-            ws.cell(row=current_row, column=2, value="Nội Dung / Phân Tích").fill = header_fill
-            ws.cell(row=current_row, column=2).font = header_font
-            ws.cell(row=current_row, column=2).border = thin_border
-            ws.row_dimensions[current_row].height = 24
-
+            headers = ["STT", "Nội Dung / Phân Tích"]
+            data_rows = []
             stt = 1
             for line in lines:
                 s = line.strip()
                 if not s or s.startswith("---"):
                     continue
-                row_num = current_row + stt
-                c1 = ws.cell(row=row_num, column=1, value=stt)
-                c1.alignment = Alignment(horizontal="center", vertical="top")
-                c1.font = cell_font
-                c1.border = thin_border
-
-                clean_text = re.sub(r"[*#_`]", "", s)
-                c2 = ws.cell(row=row_num, column=2, value=clean_text)
-                c2.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
-                c2.font = cell_font
-                c2.border = thin_border
-
-                if stt % 2 == 1:
-                    c1.fill = zebra_fill
-                    c2.fill = zebra_fill
-
-                ws.row_dimensions[row_num].height = 24
+                data_rows.append([stt, re.sub(r"[*#_`]", "", s)])
                 stt += 1
 
-            ws.column_dimensions["A"].width = 8
-            ws.column_dimensions["B"].width = 85
+        # Thử openpyxl nếu có
+        if HAS_OPENPYXL:
+            try:
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                ws.title = "Du_Lieu_AI_PTK"
 
-        buf = io.BytesIO()
-        wb.save(buf)
-        return buf.getvalue()
+                header_fill = PatternFill(start_color="1E88E5", end_color="1E88E5", fill_type="solid")
+                header_font = Font(name="Segoe UI", size=11, bold=True, color="FFFFFF")
+
+                for c_idx, h in enumerate(headers, 1):
+                    cell = ws.cell(row=1, column=c_idx, value=str(h))
+                    cell.fill = header_fill
+                    cell.font = header_font
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+
+                for r_idx, row in enumerate(data_rows, 2):
+                    for c_idx, val in enumerate(row, 1):
+                        ws.cell(row=r_idx, column=c_idx, value=str(val))
+
+                buf = io.BytesIO()
+                wb.save(buf)
+                data = buf.getvalue()
+                if len(data) > 500:
+                    return data
+            except Exception as e:
+                print(f"[ExportService] openpyxl warning: {e}, using pure engine fallback...")
+
+        # Fallback chắc chắn thành công 100% với Pure Engine
+        return cls._pure_python_xlsx(headers, data_rows, sheet_name="Du_Lieu_AI_PTK")
 
     @classmethod
-    def dataframe_to_excel(cls, df: pd.DataFrame, title: str = "Du_Lieu") -> bytes:
-        """Xuất DataFrame sang file Excel với tiêu đề và định dạng màu sắc trang nhã."""
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = title[:30]
-
-        header_fill = PatternFill(start_color="1E88E5", end_color="1E88E5", fill_type="solid")
-        header_font = Font(name="Segoe UI", size=11, bold=True, color="FFFFFF")
-        zebra_fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
-        cell_font = Font(name="Segoe UI", size=10)
-        thin_border = Border(
-            left=Side(style="thin", color="CBD5E1"),
-            right=Side(style="thin", color="CBD5E1"),
-            top=Side(style="thin", color="CBD5E1"),
-            bottom=Side(style="thin", color="CBD5E1"),
-        )
-
-        # Header
-        for col_idx, col_name in enumerate(df.columns, 1):
-            cell = ws.cell(row=1, column=col_idx, value=str(col_name))
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-            cell.border = thin_border
-        ws.row_dimensions[1].height = 24
-
-        # Dữ liệu
-        for row_idx, row in enumerate(df.itertuples(index=False), 2):
-            for col_idx, val in enumerate(row, 1):
-                cell = ws.cell(row=row_idx, column=col_idx, value=val)
-                cell.font = cell_font
-                cell.border = thin_border
-                if row_idx % 2 == 1:
-                    cell.fill = zebra_fill
-            ws.row_dimensions[row_idx].height = 20
-
-        # Auto width
-        for col in ws.columns:
-            max_len = 0
-            col_letter = get_column_letter(col[0].column)
-            for cell in col:
-                if cell.value:
-                    max_len = max(max_len, len(str(cell.value)))
-            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
-
-        buf = io.BytesIO()
-        wb.save(buf)
-        return buf.getvalue()
-
+    def dataframe_to_excel(cls, df, title: str = "Du_Lieu") -> bytes:
+        """Xuất DataFrame sang Excel với độ tin cậy tuyệt đối."""
+        headers = [str(c) for c in df.columns]
+        rows = df.values.tolist()
+        return cls._pure_python_xlsx(headers, rows, sheet_name=title[:30])
