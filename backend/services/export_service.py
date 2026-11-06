@@ -62,6 +62,8 @@ class ExportService:
         # Xử lý nội dung Markdown từng dòng
         lines = markdown_text.split("\n")
         in_table = False
+        in_code_block = False
+        code_lines = []
         table_rows = []
 
         def flush_table():
@@ -118,6 +120,29 @@ class ExportService:
         for line in lines:
             stripped = line.strip()
 
+            # Khối mã nguồn (Code block)
+            if stripped.startswith("```"):
+                if not in_code_block:
+                    in_code_block = True
+                    code_lines = []
+                else:
+                    in_code_block = False
+                    if code_lines:
+                        cp = doc.add_paragraph()
+                        cp.paragraph_format.left_indent = Inches(0.2)
+                        cp.paragraph_format.space_before = Pt(4)
+                        cp.paragraph_format.space_after = Pt(4)
+                        crun = cp.add_run("\n".join(code_lines))
+                        crun.font.name = "Consolas"
+                        crun.font.size = Pt(9.5)
+                        crun.font.color.rgb = RGBColor(30, 41, 59)
+                        code_lines = []
+                continue
+
+            if in_code_block:
+                code_lines.append(line)
+                continue
+
             # Nhận diện dòng bảng (| a | b |)
             if stripped.startswith("|") and stripped.endswith("|"):
                 in_table = True
@@ -169,6 +194,14 @@ class ExportService:
                 cls._add_formatted_runs(p, content)
                 p.paragraph_format.space_after = Pt(2)
 
+            # Danh sách có thứ tự (1. , 2. ...)
+            elif re.match(r"^\d+\.\s+", stripped):
+                p = doc.add_paragraph(style="List Number")
+                num_m = re.match(r"^\d+\.\s+", stripped)
+                content = stripped[num_m.end():]
+                cls._add_formatted_runs(p, content)
+                p.paragraph_format.space_after = Pt(2)
+
             # Đoạn văn bản thông thường
             else:
                 p = doc.add_paragraph()
@@ -177,6 +210,13 @@ class ExportService:
 
         if in_table:
             flush_table()
+
+        if in_code_block and code_lines:
+            cp = doc.add_paragraph()
+            cp.paragraph_format.left_indent = Inches(0.2)
+            crun = cp.add_run("\n".join(code_lines))
+            crun.font.name = "Consolas"
+            crun.font.size = Pt(9.5)
 
         buf = io.BytesIO()
         doc.save(buf)
@@ -357,3 +397,4 @@ class ExportService:
         buf = io.BytesIO()
         wb.save(buf)
         return buf.getvalue()
+
