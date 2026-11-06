@@ -103,3 +103,4 @@ class AutoAgentService:
             "xlsx_bytes": xlsx_data,
             "filename_base": re.sub(r"[^\w\s-]", "", title_clean).strip().replace(" ", "_"),
         }
+
