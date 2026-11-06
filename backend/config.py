@@ -6,20 +6,36 @@ Hỗ trợ đa nền tảng AI: Google Gemini, DeepSeek, OpenAI ChatGPT, Anthrop
 """
 
 import os
+import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BACKEND_DIR = Path(__file__).resolve().parent
 
-# Đọc file .env nếu có (khi chạy local)
-env_path = PROJECT_ROOT / ".env"
-if env_path.exists():
-    with open(env_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, val = line.split("=", 1)
-                os.environ[key.strip()] = val.strip()
+# Quét tất cả các vị trí có thể chứa file .env (kể cả khi chạy file .exe độc lập)
+candidate_env_paths = [
+    PROJECT_ROOT / ".env",
+    Path.cwd() / ".env",
+    Path(sys.executable).resolve().parent / ".env",
+    Path(sys.executable).resolve().parent.parent / ".env",
+    Path(r"D:\AI PTK\.env"),
+    Path.home() / "Desktop" / "AI PTK" / ".env",
+    BACKEND_DIR.parent / ".env",
+]
+
+for p in candidate_env_paths:
+    if p.is_file():
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, val = line.split("=", 1)
+                        k = key.strip()
+                        if k not in os.environ or not os.environ[k]:
+                            os.environ[k] = val.strip()
+        except Exception:
+            pass
 
 
 class Settings:

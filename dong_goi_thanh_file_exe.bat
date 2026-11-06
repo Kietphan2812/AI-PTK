@@ -8,7 +8,11 @@ echo Dang tien hanh bien dich desktop_agent.py thanh file AI_PTK.exe...
 echo Qua trinh nay co the mat 1-2 phut, vui long cho...
 echo ====================================================
 
-python -m PyInstaller --clean --onefile --noconsole --name "AI_PTK" --paths "backend" --add-data "backend;backend" --collect-all xml desktop_agent.py
+python -m PyInstaller --clean --onefile --noconsole --name "AI_PTK" --paths "backend" --add-data "backend;backend" --add-data ".env;." --collect-all xml desktop_agent.py
+
+if exist ".env" (
+    copy /y ".env" "dist\.env" >nul
+)
 
 if exist "dist\AI_PTK.exe" (
     echo.
@@ -25,4 +29,3 @@ if exist "dist\AI_PTK.exe" (
 )
 
 pause
-
