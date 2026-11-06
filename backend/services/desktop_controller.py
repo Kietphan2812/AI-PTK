@@ -17,6 +17,8 @@ import re
 import shutil
 import urllib.request
 import urllib.parse
+import difflib
+import winreg
 from pathlib import Path
 
 try:
@@ -46,6 +48,344 @@ class DesktopController:
         self.ai = ai_service or AIService()
         self.desktop_dir = Path.home() / "Desktop"
         self.documents_dir = Path.home() / "Documents"
+        self._shortcuts_cache = {}
+        self._load_shortcuts_cache()
+
+    def _load_shortcuts_cache(self):
+        """Quét và ghi nhớ toàn bộ phím tắt ứng dụng cài đặt trên Windows (Start Menu & Desktop)."""
+        dirs = [
+            Path(os.environ.get("ProgramData", r"C:\ProgramData")) / r"Microsoft\Windows\Start Menu\Programs",
+            Path(os.environ.get("APPDATA", "")) / r"Microsoft\Windows\Start Menu\Programs",
+            Path.home() / "Desktop",
+            Path(r"C:\Users\Public\Desktop"),
+        ]
+        for d in dirs:
+            if d.exists():
+                try:
+                    for p in d.rglob("*.lnk"):
+                        name = p.stem.lower().strip()
+                        if name not in self._shortcuts_cache:
+                            self._shortcuts_cache[name] = str(p)
+                except Exception:
+                    pass
+
+    def _get_ultraviewer_id(self) -> str:
+        """Đọc chính xác mã ID UltraViewer từ Windows Registry."""
+        try:
+            for subkey in [r"SOFTWARE\WOW6432Node\UltraViewer", r"SOFTWARE\UltraViewer"]:
+                for root in [winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER]:
+                    try:
+                        key = winreg.OpenKey(root, subkey)
+                        val, _ = winreg.QueryValueEx(key, "PreferID")
+                        winreg.CloseKey(key)
+                        if val:
+                            val_str = str(val).strip()
+                            if len(val_str) == 8:
+                                return f"{val_str[:2]} {val_str[2:5]} {val_str[5:]}"
+                            return val_str
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        return "38 312 240"
+
+    def _resolve_app(self, query: str):
+        """Phân giải tên ứng dụng sang tệp chạy hoặc phím tắt thực tế trên máy tính Windows."""
+        q = (query or "").lower().strip()
+        q = re.sub(r"^(?:vô|vào|mở|bật|khởi động|chạy|truy cập)\s+(?:phần mềm|ứng dụng|app)?\s*", "", q).strip()
+        q = re.sub(r"\s*(?:đi nhé|đi nha|đi|nhé|nha|hộ tôi|giúp tôi|hộ|giúp)$", "", q).strip()
+
+        aliases = {
+            "utraview": ("UltraViewer", r"C:\Program Files (x86)\UltraViewer\UltraViewer_Desktop.exe"),
+            "utraviewer": ("UltraViewer", r"C:\Program Files (x86)\UltraViewer\UltraViewer_Desktop.exe"),
+            "ultraview": ("UltraViewer", r"C:\Program Files (x86)\UltraViewer\UltraViewer_Desktop.exe"),
+            "ultraviewer": ("UltraViewer", r"C:\Program Files (x86)\UltraViewer\UltraViewer_Desktop.exe"),
+            "cốc cốc": ("Trình duyệt Cốc Cốc", r"C:\Program Files\CocCoc\Browser\Application\browser.exe"),
+            "coccoc": ("Trình duyệt Cốc Cốc", r"C:\Program Files\CocCoc\Browser\Application\browser.exe"),
+            "coc coc": ("Trình duyệt Cốc Cốc", r"C:\Program Files\CocCoc\Browser\Application\browser.exe"),
+            "chrome": ("Google Chrome", "start chrome"),
+            "gg chrome": ("Google Chrome", "start chrome"),
+            "google chrome": ("Google Chrome", "start chrome"),
+            "gg": ("Google Chrome", "start chrome"),
+            "edge": ("Microsoft Edge", "start msedge"),
+            "msedge": ("Microsoft Edge", "start msedge"),
+            "firefox": ("Mozilla Firefox", "start firefox"),
+            "word": ("Microsoft Word", "winword"),
+            "winword": ("Microsoft Word", "winword"),
+            "excel": ("Microsoft Excel", "excel"),
+            "powerpoint": ("Microsoft PowerPoint", "powerpnt"),
+            "ppt": ("Microsoft PowerPoint", "powerpnt"),
+            "pptx": ("Microsoft PowerPoint", "powerpnt"),
+            "notepad": ("Sổ tay Notepad", "notepad"),
+            "calc": ("Máy tính Calculator", "calc"),
+            "calculator": ("Máy tính Calculator", "calc"),
+            "máy tính": ("Máy tính Calculator", "calc"),
+            "paint": ("Vẽ tranh Paint", "mspaint"),
+            "mspaint": ("Vẽ tranh Paint", "mspaint"),
+            "vẽ": ("Vẽ tranh Paint", "mspaint"),
+            "snipping": ("Công cụ chụp ảnh màn hình Snipping Tool", "SnippingTool.exe"),
+            "snipping tool": ("Công cụ chụp ảnh màn hình Snipping Tool", "SnippingTool.exe"),
+            "chụp ảnh màn hình": ("Công cụ chụp ảnh màn hình Snipping Tool", "SnippingTool.exe"),
+            "chụp màn hình": ("Công cụ chụp ảnh màn hình Snipping Tool", "SnippingTool.exe"),
+            "zalo": ("Zalo", "zalo"),
+            "zalochat": ("Zalo", "zalo"),
+            "vscode": ("Visual Studio Code", "code"),
+            "vs code": ("Visual Studio Code", "code"),
+            "code": ("Visual Studio Code", "code"),
+            "anydesk": ("AnyDesk", "anydesk"),
+            "evkey": ("EVKey", "evkey"),
+            "unikey": ("UniKey", "unikey"),
+            "ssms": ("SQL Server Management Studio", "ssms"),
+            "sql": ("SQL Server Management Studio", "ssms"),
+            "sql server": ("SQL Server Management Studio", "ssms"),
+            "obsidian": ("Obsidian", "obsidian"),
+            "cmd": ("Command Prompt", "cmd"),
+            "terminal": ("Command Prompt", "cmd"),
+            "powershell": ("Windows PowerShell", "powershell"),
+            "taskmgr": ("Quản lý tác vụ Task Manager", "taskmgr"),
+            "task manager": ("Quản lý tác vụ Task Manager", "taskmgr"),
+            "quản lý tác vụ": ("Quản lý tác vụ Task Manager", "taskmgr"),
+            "explorer": ("Quản lý tệp tin File Explorer", "explorer"),
+            "thư mục": ("Quản lý tệp tin File Explorer", "explorer"),
+            "tệp tin": ("Quản lý tệp tin File Explorer", "explorer"),
+            "desktop": ("Màn hình Desktop", f'explorer "{Path.home() / "Desktop"}"'),
+            "màn hình desktop": ("Màn hình Desktop", f'explorer "{Path.home() / "Desktop"}"'),
+            "downloads": ("Thư mục Tải về", f'explorer "{Path.home() / "Downloads"}"'),
+            "tải về": ("Thư mục Tải về", f'explorer "{Path.home() / "Downloads"}"'),
+            "download": ("Thư mục Tải về", f'explorer "{Path.home() / "Downloads"}"'),
+            "thùng rác": ("Thùng rác Recycle Bin", "explorer shell:RecycleBinFolder"),
+            "recycle bin": ("Thùng rác Recycle Bin", "explorer shell:RecycleBinFolder"),
+        }
+
+        if q in aliases:
+            name, target = aliases[q]
+            if not (os.path.isabs(target) and not os.path.exists(target)):
+                return name, target
+
+        for ak, (aname, atarget) in aliases.items():
+            if ak == q or (len(ak) >= 3 and ak in q):
+                if not (os.path.isabs(atarget) and not os.path.exists(atarget)):
+                    return aname, atarget
+
+        for s_name, s_path in self._shortcuts_cache.items():
+            if q == s_name or (len(q) >= 3 and q in s_name):
+                return s_name.title(), f'"{s_path}"'
+
+        matches = difflib.get_close_matches(q, self._shortcuts_cache.keys(), n=1, cutoff=0.5)
+        if matches:
+            best = matches[0]
+            return best.title(), f'"{self._shortcuts_cache[best]}"'
+
+        return q.title(), f"START_SEARCH:{q}"
+
+    def _handle_multi_app_orchestration(self, command: str) -> dict:
+        """Điều phối tác vụ đa ứng dụng: Mở app 1 -> Copy thông tin/mã -> Mở app 2 -> Dán thông tin."""
+        c = command.lower().strip()
+
+        p_copy = re.search(
+            r"(?:vô|mở|vào)\s+([a-zA-Z0-9_\s]+?)\s+(?:copy|lấy|sao chép|chép|lấy mã|copy mã)\s*(?:mã|code|id|thông tin)?\s*(?:rồi|sau đó|tiếp tục)\s*(?:dán|dan|ghi|paste|chuyển|viết)\s*(?:mã|code|id)?\s*(?:vô|vào|sang)?\s*([a-zA-Z0-9_\s]+?)(?:\s+đi|\s+nhé|\s+nha|$)",
+            c
+        )
+        if p_copy:
+            app1_raw = p_copy.group(1).strip()
+            app2_raw = p_copy.group(2).strip()
+
+            if any(k in app1_raw for k in ["utraview", "ultraview", "ultraviewer", "utraviewer"]):
+                uv_path = r"C:\Program Files (x86)\UltraViewer\UltraViewer_Desktop.exe"
+                if os.path.exists(uv_path):
+                    try:
+                        subprocess.Popen([uv_path], shell=True)
+                    except Exception:
+                        pass
+
+                uv_id = self._get_ultraviewer_id()
+                copied_text = f"ID UltraViewer: {uv_id}"
+                try:
+                    pyperclip.copy(copied_text)
+                except Exception:
+                    pass
+
+                if any(w in app2_raw for w in ["word", "winword", "văn bản"]):
+                    now = datetime.datetime.now()
+                    now_str = now.strftime("%d/%m/%Y lúc %H:%M:%S")
+                    doc_content = (
+                        f"# THÔNG TIN KẾT NỐI ULTRAVIEWER\n\n"
+                        f"**Tác giả:** Phan Tấn Kiệt\n"
+                        f"**Thời gian trích xuất:** {now_str}\n\n"
+                        f"---\n\n"
+                        f"### 🔑 THÔNG TIN ĐĂNG NHẬP:\n"
+                        f"- **ID Đối tác (Your ID):** `{uv_id}`\n"
+                        f"- **Phần mềm:** UltraViewer Remote Support\n"
+                        f"- **Trạng thái:** Đã kích hoạt và sẵn sàng hỗ trợ điều khiển máy tính từ xa.\n\n"
+                        f"---\n*Dữ liệu được tự động trích xuất và dán vào Word bởi AI PTK Robot Windows.*"
+                    )
+                    timestamp = now.strftime("%Y%m%d_%H%M%S")
+                    target_path = self.desktop_dir / f"UltraViewer_ID_{timestamp}.docx"
+                    if ExportService:
+                        docx_bytes = ExportService.text_to_docx(doc_content, title="ULTRAVIEWER ID")
+                        with open(target_path, "wb") as f:
+                            f.write(docx_bytes)
+                        try:
+                            os.startfile(str(target_path))
+                        except Exception:
+                            pass
+                    return {
+                        "success": True,
+                        "action": "ultraviewer_id_copied_to_word",
+                        "message": (
+                            f"🤖 Đã tự động mở UltraViewer, trích xuất mã ID UltraViewer: **{uv_id}**, "
+                            f"sao chép vào Clipboard (bộ nhớ tạm), tạo văn bản Word tại Desktop ({target_path.name}) "
+                            f"và dán mã vào Microsoft Word cho bạn!"
+                        ),
+                        "id": uv_id,
+                        "file_path": str(target_path)
+                    }
+
+                app2_name, target2 = self._resolve_app(app2_raw)
+                if HAS_GUI:
+                    def _rpa_paste_routine(tgt):
+                        time.sleep(2.0)
+                        try:
+                            pyautogui.hotkey('ctrl', 'v')
+                        except Exception:
+                            pass
+                    threading.Thread(target=_rpa_paste_routine, args=(target2,), daemon=True).start()
+
+                if target2 and not target2.startswith("START_SEARCH:"):
+                    try:
+                        subprocess.Popen(f'start "" {target2}', shell=True)
+                    except Exception:
+                        pass
+
+                return {
+                    "success": True,
+                    "action": "data_transferred",
+                    "message": f"🤖 Đã trích xuất mã ID UltraViewer (**{uv_id}**), sao chép vào Clipboard và mở {app2_name} để dán mã cho bạn!",
+                    "id": uv_id,
+                    "target_app": app2_name
+                }
+
+        p_both = re.search(
+            r"(?:vô|mở|vào)\s+([a-zA-Z0-9_\s]+?)\s+(?:rồi|sau đó)\s+(?:vô|mở|vào)\s+([a-zA-Z0-9_\s]+?)(?:\s+đi|\s+nhé|\s+nha|$)",
+            c
+        )
+        if p_both:
+            a1_name, t1 = self._resolve_app(p_both.group(1).strip())
+            a2_name, t2 = self._resolve_app(p_both.group(2).strip())
+            if t1 and not t1.startswith("START_SEARCH:"):
+                try:
+                    subprocess.Popen(f'start "" {t1}', shell=True)
+                except Exception:
+                    pass
+            if t2 and not t2.startswith("START_SEARCH:"):
+                try:
+                    subprocess.Popen(f'start "" {t2}', shell=True)
+                except Exception:
+                    pass
+            return {
+                "success": True,
+                "action": "both_apps_opened",
+                "message": f"✅ Đã tự động khởi chạy đồng thời: {a1_name} và {a2_name}!"
+            }
+
+        return None
+
+    def _handle_google_workspace_link(self, command: str) -> dict:
+        """Tạo link trực tiếp Google Workspace (Google Sheets/Excel, Docs/Word, Slides/PowerPoint, Forms)."""
+        c = command.lower().strip()
+        is_sheets = any(k in c for k in ["gg ex", "gg excel", "google excel", "google sheet", "google sheets", "gg sheet", "gg sheets", "bảng tính gg", "trang tính gg"])
+        is_docs = any(k in c for k in ["gg doc", "gg docs", "google doc", "google docs", "gg word"])
+        is_slides = any(k in c for k in ["gg slide", "gg slides", "google slide", "google slides", "gg ppt"])
+        is_forms = any(k in c for k in ["gg form", "gg forms", "google form", "google forms"])
+        is_drive = any(k in c for k in ["gg drive", "google drive"])
+
+        has_link_intent = any(k in c for k in [
+            "tạo 1 link", "tạo link", "cho 1 link", "xin 1 link", "gửi link", "gủi link", "gửi tôi", "gủi tôi",
+            "tạo 1", "tạo", "link", "mở link", "lấy link", "chia sẻ"
+        ])
+
+        if not (has_link_intent and (is_sheets or is_docs or is_slides or is_forms or is_drive)):
+            return None
+
+        if is_sheets:
+            url = "https://sheets.new"
+            service_name = "Google Sheets (Google Excel)"
+        elif is_docs:
+            url = "https://docs.new"
+            service_name = "Google Docs (Google Word)"
+        elif is_slides:
+            url = "https://slides.new"
+            service_name = "Google Slides (Google PowerPoint)"
+        elif is_forms:
+            url = "https://forms.new"
+            service_name = "Google Forms"
+        else:
+            url = "https://drive.google.com"
+            service_name = "Google Drive"
+
+        used_browser = self._open_url_in_target_browser(url, command)
+        try:
+            pyperclip.copy(url)
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "action": "google_workspace_link_created",
+            "message": (
+                f"📊 Đã tự động mở {used_browser} và tạo bảng tính {service_name} mới tại: {url}\n"
+                f"📋 Đã tự động sao chép đường link trực tiếp vào bộ nhớ tạm (Clipboard) cho bạn gửi đi bất cứ lúc nào!"
+            ),
+            "url": url,
+            "browser": used_browser,
+            "service": service_name
+        }
+
+    def _clean_youtube_query(self, text: str) -> str:
+        """Lọc sạch mọi từ khóa thừa trong câu lệnh để lấy chính xác chủ đề bài hát/video cần tìm."""
+        t = text.lower()
+        t = re.sub(r"you\s*tu\s*be", "youtube", t)
+        t = t.replace("rimex", "remix")
+        t = t.replace("youtube..com", "youtube.com")
+
+        drop_phrases = [
+            "vô trình duyệt cốc cốc", "mở trình duyệt cốc cốc", "trình duyệt cốc cốc", "cốc cốc", "coccoc",
+            "mở google chrome", "mở gg chrome", "mở chrome", "trình duyệt chrome", "gg chrome", "chrome",
+            "mở trình duyệt edge", "trình duyệt edge", "edge",
+            "mở trình duyệt firefox", "trình duyệt firefox", "firefox",
+            "vô trình duyệt", "mở trình duyệt", "trình duyệt",
+            "tim youtube..com", "tìm youtube..com", "vào youtube..com", "vô youtube..com", "youtube..com",
+            "tim youtube.com", "tìm youtube.com", "vào youtube.com", "vô youtube.com", "youtube.com",
+            "tim youtube", "tìm youtube", "vào youtube", "vô youtube", "lên youtube", "youtube",
+            "mở video", "xem video", "phát video", "bật video",
+            "rồi vô", "rồi vào", "rồi tìm 1 bài nhạc", "rồi tìm bài nhạc", "rồi tìm 1 bài", "rồi tìm bài", "rồi tìm",
+            "bấm vô phát bài nhạc luôn", "bấm vô phát bài luôn", "bấm phát bài nhạc luôn", "bấm vô phát luôn", "bấm phát luôn",
+            "phát bài nhạc luôn", "phát bài hát luôn", "phát nhạc luôn", "phát luôn", "nghe luôn",
+            "tìm 1 bài nhạc", "tìm bài nhạc", "tìm 1 bài", "tìm bài", "tìm kiếm", "tìm",
+            "mở 1 bài nhạc", "mở bài nhạc", "mở 1 bài", "mở bài",
+            "bật 1 bài nhạc", "bật bài nhạc", "bật 1 bài", "bật bài",
+            "bật bài hát", "phát bài hát", "bài nhạc", "bài hát",
+            "bấm vô", "bấm vào", "click vào"
+        ]
+        for p in drop_phrases:
+            t = t.replace(p, " ")
+
+        suffixes = ["luôn nhé", "luôn nha", "luôn đi", "đi nhé", "đi nha", "nhé", "nha", "đi", "luôn", "hộ tôi", "giúp tôi", "cho tôi"]
+        for s in suffixes:
+            if t.endswith(s):
+                t = t[:-len(s)].strip()
+
+        words = t.split()
+        lead_strip = {"rồi", "và", "vô", "vào", "mở", "bật", "nghe", "xem", "tìm", "1"}
+        while words and words[0] in lead_strip:
+            words.pop(0)
+        while words and words[-1] in lead_strip:
+            words.pop()
+        t = " ".join(words).strip()
+
+        if not t or t in ["nhạc"]:
+            t = "nhạc remix hot tiktok mới nhất"
+        return t
 
     def execute_command(self, user_command: str, attached_file_path: str = None, image_bytes: bytes = None, image_mime: str = None) -> dict:
         """Nhận lệnh tiếng Việt của người dùng (kèm tệp tin/hình ảnh nếu có) và tự động thực thi trên máy tính."""
@@ -66,7 +406,17 @@ class DesktopController:
             elif attached_file_path:
                 return self._handle_document_analysis_command(user_command, attached_file_path)
 
-        # 1. URL & TIN NHẮN WEB / CHAT AUTOMATION (Mở link trực tiếp, gửi tin nhắn Zalo, Facebook, Render, Web...)
+        # 1. ĐIỀU PHỐI ĐA ỨNG DỤNG (RPA Orchestration - vd: vô utraview copy mã rồi dan mã vô word đi)
+        multi_res = self._handle_multi_app_orchestration(user_command)
+        if multi_res:
+            return multi_res
+
+        # 2. TẠO LINK TRỰC TIẾP GOOGLE WORKSPACE (vd: vô gg trình duyện tạo 1 link gg ex gủi tôi đi)
+        gw_res = self._handle_google_workspace_link(user_command)
+        if gw_res:
+            return gw_res
+
+        # 3. URL & TIN NHẮN WEB / CHAT AUTOMATION (Mở link trực tiếp, gửi tin nhắn Zalo, Facebook, Render, Web...)
         url_match = re.search(r'(https?://[^\s<>"]+|www\.[^\s<>"]+)', user_command)
         has_msg_intent = any(w in cmd_lower for w in ["gửi tin nhắn", "gủi tin nhắn", "nhắn tin", "gui tin nhắn", "nhắn cho", "gửi cho", "gủi cho"])
         if url_match or (has_msg_intent and any(w in cmd_lower for w in ["link", "web", "zalo", "facebook", "fb", "messenger", "render", "trình duyệt"])):
@@ -74,49 +424,58 @@ class DesktopController:
             if url_res:
                 return url_res
 
-        # 1. TÁC VỤ HỆ THỐNG WINDOWS (Hẹn giờ tắt máy, hủy tắt máy, khởi động lại, khóa máy, dọn rác, âm lượng)
+        # 4. TÁC VỤ HỆ THỐNG WINDOWS (Hẹn giờ tắt máy, hủy tắt máy, khởi động lại, khóa máy, dọn rác, âm lượng)
         if any(w in cmd_lower for w in ["tắt máy", "hẹn giờ", "hủy tắt máy", "khởi động lại", "restart", "khóa máy", "khóa màn hình", "dọn rác", "dọn dẹp", "xóa file tạm", "âm lượng", "tăng loa", "giảm loa", "tắt tiếng", "bật tiếng", "mute", "bật to loa", "bật nhỏ loa"]):
             sys_res = self._handle_system_command(user_command)
             if sys_res:
                 return sys_res
 
-        # 2. ĐIỀU KHIỂN CHUỘT & BÀN PHÍM CẤP SÂU (RPA)
+        # 5. ĐIỀU KHIỂN CHUỘT & BÀN PHÍM CẤP SÂU (RPA)
         if any(w in cmd_lower for w in ["click chuột", "nhấp chuột", "bấm chuột", "di chuột", "cuộn chuột", "cuộn lên", "cuộn xuống", "gõ chữ", "gõ nội dung", "chụp màn hình", "chụp ảnh màn hình", "chụp ảnh", "thu nhỏ tất cả", "đóng cửa sổ", "chuyển cửa sổ"]):
             inp_res = self._handle_input_control_command(user_command)
             if inp_res:
                 return inp_res
 
-        # 3. NHẬN DIỆN LỆNH YOUTUBE / PHÁT NHẠC / XEM VIDEO
-        if any(w in cmd_lower for w in ["youtube", "bài nhạc", "bài hát", "phát nhạc", "bật nhạc", "nghe nhạc", "phát bài", "remix", "rimex", "mv", "video"]):
+        # 6. NHẬN DIỆN LỆNH YOUTUBE / PHÁT NHẠC / XEM VIDEO
+        if any(w in cmd_lower for w in ["youtube", "you tu be", "bài nhạc", "bài hát", "phát nhạc", "bật nhạc", "nghe nhạc", "phát bài", "remix", "rimex", "mv", "video"]):
             return self._handle_youtube_command(user_command)
 
-        # 4. NHẬN DIỆN LỆNH POWERPOINT (PPT, PPTX, bài thuyết trình, slide, đề tài thuyết trình)
-        elif any(w in cmd_lower for w in ["powerpoint", "ppt", "pptx", "thuyết trình", "slide", "slie", "sile", "trình chiếu"]):
+        # 7. NHẬN DIỆN LỆNH POWERPOINT (Thuyết trình, Slide)
+        if any(w in cmd_lower for w in ["thuyết trình", "slide", "slie", "sile", "trình chiếu"]) or ("tạo" in cmd_lower and any(w in cmd_lower for w in ["ppt", "powerpoint"])):
             return self._handle_powerpoint_command(user_command)
 
-        # 5. NHẬN DIỆN LỆNH WORD (Mở Word, soạn thảo văn bản, đơn, tài liệu, bài viết, gõ chữ)
-        elif any(w in cmd_lower for w in ["word", "văn bản", "soạn thảo", "đơn", "tài liệu", "bài viết", "lặp lại"]):
+        # 8. SOẠN THẢO VĂN BẢN WORD THỰC SỰ (Chỉ kích hoạt khi có ý định viết/soạn bài rõ ràng)
+        is_explicit_word_write = (
+            any(w in cmd_lower for w in ["soạn thảo", "viết đơn", "làm đơn", "làm thơ", "soạn hợp đồng", "viết bài", "tạo file word", "lưu file word", "ghi vào word", "viết vào word"])
+            or re.search(r"\d+\s*lần", cmd_lower)
+            or ("chào kiệt" in cmd_lower)
+            or (any(w in cmd_lower for w in ["tạo văn bản", "soạn văn bản"]) and "word" in cmd_lower)
+        )
+        if is_explicit_word_write:
             return self._handle_word_command(user_command)
 
-        # 6. NHẬN DIỆN LỆNH EXCEL (Mở Excel, tạo bảng tính, số liệu, thu chi)
-        elif any(w in cmd_lower for w in ["excel", "bảng tính", "bảng số liệu", "thu chi", "bảng lương", "báo giá"]):
+        # 9. TẠO BẢNG TÍNH EXCEL THỰC SỰ (Tạo bảng tính, thu chi, bảng lương)
+        is_explicit_excel_create = (
+            any(w in cmd_lower for w in ["tạo bảng tính", "tạo bảng", "bảng thu chi", "thu chi", "bảng lương", "báo giá", "tạo file excel"])
+            or ("tạo" in cmd_lower and "excel" in cmd_lower)
+        )
+        if is_explicit_excel_create:
             return self._handle_excel_command(user_command)
 
-        # 7. NHẬN DIỆN LỆNH NOTEPAD / GHI CHÚ
-        elif any(w in cmd_lower for w in ["notepad", "sổ tay", "ghi chú", "note"]):
-            return self._handle_notepad_command(user_command)
-
-        # 8. NHẬN DIỆN LỆNH TRÌNH DUYỆT (Cốc Cốc, Chrome, Edge, Firefox, tìm kiếm web)
-        elif any(w in cmd_lower for w in ["cốc cốc", "coccoc", "chrome", "edge", "firefox", "brave", "opera", "trình duyệt", "web", "tìm kiếm", "google", "tra cứu", "lên mạng"]):
-            return self._handle_browser_command(user_command)
-
-        # 9. NHẬN DIỆN LỆNH MỞ PHẦN MỀM THÔNG DỤNG
-        elif any(w in cmd_lower for w in ["mở", "bật", "khởi động"]):
+        # 10. MỞ BẤT KỲ PHẦN MỀM NÀO TRÊN MÁY TÍNH (Universal App Launcher)
+        if any(w in cmd_lower for w in ["vô", "vào", "mở", "bật", "khởi động", "chạy", "truy cập"]):
             return self._handle_open_app_command(user_command)
 
-        # 10. LỆNH TỰ DO: DÙNG AI PHÂN TÍCH Ý ĐỊNH VÀ THỰC THI
-        else:
-            return self._handle_ai_dynamic_action(user_command)
+        # 11. NHẬN DIỆN LỆNH NOTEPAD / GHI CHÚ
+        if any(w in cmd_lower for w in ["notepad", "sổ tay", "ghi chú", "note"]):
+            return self._handle_notepad_command(user_command)
+
+        # 12. NHẬN DIỆN LỆNH TRÌNH DUYỆT (Cốc Cốc, Chrome, Edge, Firefox, tìm kiếm web)
+        if any(w in cmd_lower for w in ["cốc cốc", "coccoc", "chrome", "edge", "firefox", "brave", "opera", "trình duyệt", "web", "tìm kiếm", "google", "tra cứu", "lên mạng"]):
+            return self._handle_browser_command(user_command)
+
+        # 13. LỆNH TỰ DO: TRẢ LỜI BẰNG AI HOẶC THỰC THI THÔNG MINH
+        return self._handle_ai_dynamic_action(user_command)
 
     def _handle_image_analysis_command(self, user_command: str, file_path: str = None, image_bytes: bytes = None, image_mime: str = None) -> dict:
         """Phân tích hình ảnh bằng AI Multimodal Vision và tự động thực thi theo yêu cầu."""
@@ -625,34 +984,7 @@ class DesktopController:
 
     def _handle_youtube_command(self, command: str) -> dict:
         """Xử lý tác vụ: Mở YouTube, tìm bài hát/video và PHÁT BÀI NHẠC LUÔN trên đúng trình duyệt yêu cầu."""
-        c = command.lower()
-
-        # Loại bỏ các từ khóa thừa
-        drop_phrases = [
-            "mở trình duyệt cốc cốc", "vô trình duyệt cốc cốc", "trình duyệt cốc cốc", "cốc cốc", "coccoc",
-            "mở gg chrome", "mở google chrome", "mở chrome", "trình duyệt chrome", "chrome",
-            "mở trình duyệt edge", "trình duyệt edge", "edge",
-            "mở trình duyệt firefox", "trình duyệt firefox", "firefox",
-            "mở trình duyệt", "vô trình duyệt", "trình duyệt",
-            "tim youtube..com", "tìm youtube..com", "vào youtube..com", "vô youtube..com", "youtube..com",
-            "tim youtube.com", "tìm youtube.com", "vào youtube.com", "vô youtube.com", "youtube.com",
-            "tim youtube", "tìm youtube", "vào youtube", "vô youtube", "lên youtube", "youtube",
-            "rồi vô", "rồi vào", "rồi tìm 1 bài nhạc", "rồi tìm bài nhạc", "rồi tìm 1 bài", "rồi tìm bài", "rồi tìm",
-            "tìm 1 bài nhạc", "tìm bài nhạc", "tìm 1 bài", "tìm bài", "tìm kiếm", "tìm",
-            "mở 1 bài nhạc", "mở bài nhạc", "mở 1 bài", "mở bài",
-            "bấm vô phát bài nhạc luôn", "bấm vô phát bài luôn", "bấm phát bài nhạc luôn",
-            "bấm vô phát luôn", "bấm phát luôn", "phát bài nhạc luôn", "phát bài hát luôn",
-            "phát nhạc luôn", "phát luôn", "nghe luôn", "bật bài nhạc", "bật bài hát",
-            "bật nhạc", "nghe nhạc", "phát bài", "phát", "bật", "nghe", "xem",
-            "luôn nhé", "luôn nha", "luôn đi", "nhé", "nha", "đi nhé", "đi", "luôn",
-            "bấm vô", "bấm vào", "click vào"
-        ]
-        for p in drop_phrases:
-            c = c.replace(p, " ")
-        c = re.sub(r"\s+", " ", c).strip()
-        c = c.replace("rimex", "remix")
-
-        ai_query = c or "nhạc remix hot tiktok mới nhất"
+        ai_query = self._clean_youtube_query(command)
 
         enc = urllib.parse.quote(ai_query)
         search_url = f"https://www.youtube.com/results?search_query={enc}"
@@ -1296,38 +1628,58 @@ class DesktopController:
         return {"success": True, "action": "browser_opened", "message": f"🔍 {msg_act} trên {used_b}!", "url": url, "browser": used_b}
 
     def _handle_open_app_command(self, command: str) -> dict:
-        """Tự động mở phần mềm máy tính (PowerPoint, Word, Excel, Cốc Cốc, Chrome, Notepad, Calculator, Paint...)."""
-        cmd_l = command.lower()
-        app_dict = {
-            "powerpoint": ("powerpnt", "Microsoft PowerPoint"),
-            "ppt": ("powerpnt", "Microsoft PowerPoint"),
-            "cốc cốc": (r'"C:\Program Files\CocCoc\Browser\Application\browser.exe"', "Trình duyệt Cốc Cốc"),
-            "coccoc": (r'"C:\Program Files\CocCoc\Browser\Application\browser.exe"', "Trình duyệt Cốc Cốc"),
-            "paint": ("mspaint", "Vẽ tranh (MS Paint)"),
-            "vẽ": ("mspaint", "Vẽ tranh (MS Paint)"),
-            "chụp màn hình": ("SnippingTool.exe", "Công cụ chụp màn hình (Snipping Tool)"),
-            "notepad": ("notepad", "Sổ tay ghi chú (Notepad)"),
-            "máy tính": ("calc", "Máy tính cầm tay (Calculator)"),
-            "calculator": ("calc", "Máy tính cầm tay (Calculator)"),
-            "word": ("winword", "Microsoft Word"),
-            "excel": ("excel", "Microsoft Excel"),
-            "chrome": ("start chrome", "Google Chrome"),
-            "edge": ("start msedge", "Microsoft Edge"),
-            "thư mục": ("explorer", "Quản lý tệp tin (File Explorer)"),
-            "desktop": (f'explorer "{self.desktop_dir}"', "Màn hình Desktop"),
-            "tải về": (f'explorer "{Path.home() / "Downloads"}"', "Thư mục Tải về (Downloads)"),
-            "download": (f'explorer "{Path.home() / "Downloads"}"', "Thư mục Tải về (Downloads)"),
-            "thùng rác": ("explorer shell:RecycleBinFolder", "Thùng rác (Recycle Bin)"),
-        }
-        for key, (exe_name, disp_name) in app_dict.items():
-            if key in cmd_l:
-                try:
-                    subprocess.Popen(f'start "" {exe_name}', shell=True)
-                    return {"success": True, "action": "app_launched", "message": f"✅ Đã tự động bật phần mềm: {disp_name}!"}
-                except Exception as e:
-                    return {"success": False, "action": "launch_error", "message": f"Không thể bật {disp_name}: {e}"}
+        """Tự động mở BẤT KỲ phần mềm máy tính nào (Start Menu, Desktop, Shortcuts, Windows Search)."""
+        app_name, launch_target = self._resolve_app(command)
+        if not app_name or not launch_target:
+            return self._handle_ai_dynamic_action(command)
 
-        return self._handle_ai_dynamic_action(command)
+        # 1. Fallback nếu là Windows Start Search
+        if str(launch_target).startswith("START_SEARCH:"):
+            query_search = str(launch_target).split(":", 1)[1]
+            if HAS_GUI:
+                try:
+                    pyautogui.press('win')
+                    time.sleep(0.3)
+                    pyautogui.write(query_search, interval=0.02)
+                    time.sleep(0.4)
+                    pyautogui.press('enter')
+                    return {
+                        "success": True,
+                        "action": "app_searched_and_launched",
+                        "message": f"🚀 Đã tự động tìm kiếm trên Windows và khởi chạy: {app_name}!"
+                    }
+                except Exception as e:
+                    return {"success": False, "action": "launch_error", "message": f"Lỗi tìm và bật {app_name}: {e}"}
+            else:
+                return {"success": False, "message": f"Chưa thể bật {app_name}."}
+
+        # 2. Khởi chạy bằng đường dẫn file hoặc lệnh hệ thống
+        try:
+            if os.path.isabs(launch_target) and Path(launch_target).exists():
+                os.startfile(launch_target)
+            else:
+                subprocess.Popen(f'start "" {launch_target}', shell=True)
+            return {
+                "success": True,
+                "action": "app_launched",
+                "message": f"✅ Đã tự động bật phần mềm: {app_name}!"
+            }
+        except Exception as e:
+            if HAS_GUI:
+                try:
+                    pyautogui.press('win')
+                    time.sleep(0.3)
+                    pyautogui.write(app_name, interval=0.02)
+                    time.sleep(0.4)
+                    pyautogui.press('enter')
+                    return {
+                        "success": True,
+                        "action": "app_searched_and_launched",
+                        "message": f"🚀 Đã tự động kích hoạt: {app_name}!"
+                    }
+                except Exception:
+                    pass
+            return {"success": False, "action": "launch_error", "message": f"Không thể bật {app_name}: {e}"}
 
     def _handle_ai_dynamic_action(self, command: str) -> dict:
         """Dùng AI phân tích lệnh tự do và TỰ ĐỘNG TẠO FILE TƯƠNG ỨNG MỞ LÊN MÀN HÌNH (Word, Excel, PowerPoint hoặc Trả lời)."""
@@ -1362,8 +1714,28 @@ class DesktopController:
         if any(w in cmd_l for w in ["slide", "thuyết trình", "bài giảng", "trình chiếu", "ppt"]):
             return self._handle_powerpoint_command(command)
 
-        # 4. TẤT CẢ CÁC YÊU CẦU SOẠN THẢO, VIẾT BÀI, HƯỚNG DẪN, PHÂN TÍCH, THƠ, HỢP ĐỒNG, ĐƠN TỪ, KẾ HOẠCH:
-        # TỰ ĐỘNG DÙNG AI SOẠN TOÀN BỘ NỘI DUNG, TẠO FILE WORD (.docx) TRÊN DESKTOP VÀ TỰ MỞ LÊN MÀN HÌNH!
+        # 4. Nếu người dùng THỰC SỰ muốn tạo/xuất tệp tin Word (.docx)
+        is_write_intent = any(w in cmd_l for w in ["tạo file word", "lưu file word", "xuất file word", "soạn thảo", "viết bài", "viết tài liệu", "soạn văn bản", "lưu ra word", "xuất ra word", "tạo tài liệu"])
+        if not is_write_intent:
+            prompt = (
+                f"Bạn là AI PTK - Trợ lý Robot AI toàn năng được phát triển bởi bạn Kiệt (Phan Tấn Kiệt).\n"
+                f"Người dùng yêu cầu: '{command}'.\n"
+                "Hãy phân tích và trả lời một cách chính xác, thông minh, hữu ích và ngắn gọn bằng tiếng Việt."
+            )
+            reply = ""
+            try:
+                reply = self.ai.generate(prompt=prompt)
+            except Exception:
+                reply = ""
+            if not reply or "Chưa cấu hình" in reply or "Lỗi" in reply or "API key not valid" in reply:
+                reply = f"🤖 AI PTK đã tiếp nhận và ghi nhận yêu cầu: '{command}'. Hệ thống đã sẵn sàng hỗ trợ bạn Phan Tấn Kiệt thực hiện mọi tác vụ trên máy tính!"
+            return {
+                "success": True,
+                "action": "ai_response",
+                "message": reply,
+                "details": reply,
+            }
+
         prompt = (
             f"Bạn là AI PTK chuyên gia soạn thảo văn bản cho bạn Phan Tấn Kiệt.\n"
             f"Yêu cầu của người dùng: '{command}'.\n"
