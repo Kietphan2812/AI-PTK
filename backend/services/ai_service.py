@@ -1,6 +1,7 @@
 """
 AI Service - Tương tác trực tiếp với Google Gemini API
-Trang bị System Instruction thông minh, nhận biết thời gian thực và cá nhân hóa cho Kiệt (AI PTK).
+Hỗ trợ cơ chế Multi-Model Fallback: Tự động đổi sang mô hình dự phòng khi gặp lỗi Quota/Rate Limit (429).
+Nhận biết thời gian thực và cá nhân hóa cho Kiệt (AI PTK).
 """
 
 import json
@@ -9,20 +10,26 @@ import urllib.error
 import datetime
 from config import settings
 
+# Danh sách mô hình ưu tiên theo thứ tự độ ổn định và hạn mức cao
+FALLBACK_MODELS = [
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-flash-lite-latest",
+    "gemma-4-26b-a4b-it",
+]
+
 
 class AIService:
-    """Lớp xử lý gọi mô hình Gemini (thông minh, nhận biết thời gian thực, chủ động)."""
+    """Lớp xử lý gọi mô hình Gemini (chống lỗi Quota 429 bằng Multi-Model Fallback)."""
 
     def __init__(self):
         self.api_key = settings.GEMINI_API_KEY
-        self.model_name = settings.GEMINI_MODEL
         self.initialized = bool(self.api_key and self.api_key != "your_gemini_api_key_here")
 
     def _ensure_initialized(self):
         if not self.initialized:
             settings.validate()
             self.api_key = settings.GEMINI_API_KEY
-            self.model_name = settings.GEMINI_MODEL
             self.initialized = True
 
     def _get_system_instruction(self) -> dict:
@@ -45,9 +52,8 @@ class AIService:
         return {"parts": [{"text": prompt}]}
 
     def _call_rest_api(self, contents: list) -> str:
-        """Gọi trực tiếp Google Gemini REST API."""
+        """Gọi Gemini REST API với cơ chế tự động chuyển mô hình khi gặp lỗi 429."""
         api_key = settings.GEMINI_API_KEY or self.api_key
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:generateContent?key={api_key}"
         headers = {"Content-Type": "application/json"}
 
         payload_dict = {
@@ -56,26 +62,36 @@ class AIService:
         }
         payload = json.dumps(payload_dict).encode("utf-8")
 
-        req = urllib.request.Request(url, data=payload, headers=headers)
-        try:
-            with urllib.request.urlopen(req, timeout=60) as response:
-                result = json.loads(response.read().decode("utf-8"))
-                candidates = result.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts:
-                        return parts[0].get("text", "")
-                return "Không nhận được nội dung từ AI."
-        except urllib.error.HTTPError as e:
-            err_body = e.read().decode("utf-8")
+        last_error = ""
+
+        # Duyệt qua các mô hình dự phòng
+        for model in FALLBACK_MODELS:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            req = urllib.request.Request(url, data=payload, headers=headers)
             try:
-                err_json = json.loads(err_body)
-                msg = err_json.get("error", {}).get("message", err_body)
-            except Exception:
-                msg = err_body
-            return f"Lỗi Gemini API ({e.code}): {msg}"
-        except Exception as e:
-            return f"Lỗi kết nối API: {str(e)}"
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    result = json.loads(response.read().decode("utf-8"))
+                    candidates = result.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts:
+                            return parts[0].get("text", "")
+                    return "Không nhận được nội dung từ AI."
+            except urllib.error.HTTPError as e:
+                err_body = e.read().decode("utf-8")
+                # Nếu gặp lỗi 429 (hết lượt) hoặc 404 (không tìm thấy model) -> Tự động thử model tiếp theo
+                if e.code in [429, 404, 503]:
+                    print(f"[AI Service] Model {model} báo lỗi {e.code}, tự động chuyển sang mô hình tiếp theo...")
+                    last_error = f"Lỗi {e.code} ở mô hình {model}"
+                    continue
+                else:
+                    return f"Lỗi Gemini API ({e.code}): {err_body}"
+            except Exception as e:
+                print(f"[AI Service] Model {model} lỗi kết nối: {e}, thử mô hình khác...")
+                last_error = str(e)
+                continue
+
+        return f"Tất cả mô hình dự phòng đều tạm bận. Vui lòng thử lại sau giây lát ({last_error})."
 
     def generate(self, prompt: str) -> str:
         """Gửi prompt đơn lẻ và nhận kết quả."""
