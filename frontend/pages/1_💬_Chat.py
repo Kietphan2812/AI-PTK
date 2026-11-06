@@ -4,8 +4,15 @@ Hỗ trợ: Gửi câu hỏi kèm hình ảnh (giải toán, đọc chữ, mô t
 """
 
 import os
+import io
 import streamlit as st
 import requests
+
+try:
+    from streamlit_paste_button import paste_image_button
+    HAS_PASTE_BUTTON = True
+except Exception:
+    HAS_PASTE_BUTTON = False
 
 st.set_page_config(page_title="Chat AI - AI PTK", page_icon="💬", layout="wide")
 
@@ -13,7 +20,7 @@ st.markdown(
     """
     <div style="background: linear-gradient(135deg, #1E88E5 0%, #1565C0 100%); padding: 20px; border-radius: 12px; color: white; margin-bottom: 20px;">
         <h2 style="margin: 0;">💬 Chatbot Trí Tuệ Nhân Tạo & Thị Giác (Vision)</h2>
-        <p style="margin: 5px 0 0 0; opacity: 0.9;">Hỗ trợ trò chuyện thông minh và đọc/phân tích hình ảnh (giải bài tập, đọc tài liệu, nhận diện ảnh).</p>
+        <p style="margin: 5px 0 0 0; opacity: 0.9;">Hỗ trợ trò chuyện thông minh và đọc/phân tích hình ảnh (giải bài tập, đọc tài liệu, nhận diện ảnh, dán ảnh từ Clipboard).</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -21,6 +28,11 @@ st.markdown(
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+
+if "active_image_bytes" not in st.session_state:
+    st.session_state.active_image_bytes = None
+if "active_image_mime" not in st.session_state:
+    st.session_state.active_image_mime = None
 
 # BỘ CHỌN NÃO AI & TÙY CHỈNH
 col_model, col_del = st.columns([5, 1])
@@ -52,13 +64,53 @@ with col_del:
 col_attach, col_key = st.columns([1, 1])
 
 with col_attach:
-    uploaded_image = st.file_uploader(
-        "📷 Đính kèm hình ảnh để AI đọc/phân tích (tùy chọn):",
-        type=["png", "jpg", "jpeg", "webp"],
-        key="chat_uploader_image",
-    )
-    if uploaded_image:
-        st.image(uploaded_image, caption="Ảnh đã chọn - AI sẽ đọc ảnh này khi bạn gửi câu hỏi", width=220)
+    st.markdown("##### 📸 Đính kèm ảnh (Dán từ Clipboard hoặc Tải file)")
+    tab_paste, tab_upload = st.tabs(["📋 Dán ảnh từ Clipboard (Copy-Paste)", "📁 Tải file từ máy"])
+
+    with tab_paste:
+        st.caption("👉 Chụp màn hình (`Windows + Shift + S`) hoặc Copy ảnh, rồi bấm nút bên dưới:")
+        if HAS_PASTE_BUTTON:
+            paste_result = paste_image_button(
+                label="📋 Bấm vào đây để Dán ảnh vừa Copy (Ctrl + V)",
+                text_color="#ffffff",
+                background_color="#1E88E5",
+                hover_background_color="#1565C0",
+                key="paste_button_chat",
+            )
+            if paste_result is not None and getattr(paste_result, "image_data", None) is not None:
+                buf = io.BytesIO()
+                paste_result.image_data.save(buf, format="PNG")
+                st.session_state.active_image_bytes = buf.getvalue()
+                st.session_state.active_image_mime = "image/png"
+        else:
+            st.info("💡 Bạn có thể dùng tab 'Tải file từ máy' để tải ảnh lên.")
+
+    with tab_upload:
+        uploaded_image = st.file_uploader(
+            "Chọn file ảnh từ thiết bị (PNG, JPG, WEBP):",
+            type=["png", "jpg", "jpeg", "webp"],
+            key="chat_uploader_image",
+        )
+        if uploaded_image:
+            st.session_state.active_image_bytes = uploaded_image.getvalue()
+            st.session_state.active_image_mime = uploaded_image.type
+
+    # Hiển thị ảnh đang được chọn (Preview)
+    if st.session_state.get("active_image_bytes"):
+        st.write("")
+        p_col1, p_col2 = st.columns([2, 1])
+        with p_col1:
+            st.image(
+                st.session_state.active_image_bytes,
+                caption="✅ Đã đính kèm ảnh (AI sẽ đọc ảnh này cùng câu hỏi)",
+                width=240,
+            )
+        with p_col2:
+            st.write("")
+            if st.button("❌ Bỏ ảnh này", key="remove_active_image"):
+                st.session_state.active_image_bytes = None
+                st.session_state.active_image_mime = None
+                st.rerun()
 
 with col_key:
     with st.expander("🔑 Cài đặt API Key riêng (Tùy chọn)"):
@@ -84,12 +136,9 @@ for msg in st.session_state.chat_history:
 
 # Ô nhập tin nhắn
 if user_prompt := st.chat_input("Nhập câu hỏi hoặc yêu cầu AI phân tích ảnh..."):
-    # Đọc ảnh nếu người dùng đính kèm
-    current_img_bytes = None
-    current_img_mime = None
-    if uploaded_image:
-        current_img_bytes = uploaded_image.getvalue()
-        current_img_mime = uploaded_image.type
+    # Lấy ảnh hiện tại nếu người dùng đã Dán hoặc Tải lên
+    current_img_bytes = st.session_state.get("active_image_bytes")
+    current_img_mime = st.session_state.get("active_image_mime") or "image/jpeg"
 
     # Hiển thị tin nhắn người dùng
     with st.chat_message("user"):
@@ -102,6 +151,10 @@ if user_prompt := st.chat_input("Nhập câu hỏi hoặc yêu cầu AI phân t�
         "parts": user_prompt,
         "image": current_img_bytes,
     })
+
+    # Xóa ảnh active sau khi đã gửi để câu tiếp theo không bị dính ảnh cũ
+    st.session_state.active_image_bytes = None
+    st.session_state.active_image_mime = None
 
     # Xử lý chat qua Service Bridge
     with st.chat_message("assistant"):
