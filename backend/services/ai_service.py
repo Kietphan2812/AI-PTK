@@ -26,7 +26,8 @@ class AIService:
 
     def _call_rest_api(self, contents: list) -> str:
         """Gọi trực tiếp Google Gemini REST API (cực kỳ ổn định và nhanh)."""
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:generateContent?key={self.api_key}"
+        api_key = settings.GEMINI_API_KEY or self.api_key
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:generateContent?key={api_key}"
         headers = {"Content-Type": "application/json"}
         payload = json.dumps({"contents": contents}).encode("utf-8")
 
