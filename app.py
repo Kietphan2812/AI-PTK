@@ -20,3 +20,4 @@ with open(app_path, "r", encoding="utf-8") as f:
     code = f.read()
 
 exec(code, {"__name__": "__main__", "__file__": str(app_path)})
+
