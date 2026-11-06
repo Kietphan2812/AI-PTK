@@ -10,15 +10,19 @@ import tempfile
 import requests
 from pathlib import Path
 
-# Thêm đường dẫn backend vào sys.path để có thể dùng service trực tiếp
-FRONTEND_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = FRONTEND_DIR.parent
-BACKEND_DIR = PROJECT_ROOT / "backend"
+# Thêm đường dẫn backend & root vào sys.path
+CURRENT_DIR = Path(__file__).resolve().parent
+if (CURRENT_DIR / "backend").exists():
+    PROJECT_ROOT = CURRENT_DIR
+else:
+    PROJECT_ROOT = CURRENT_DIR.parent
 
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+BACKEND_DIR = PROJECT_ROOT / "backend"
+FRONTEND_DIR = PROJECT_ROOT / "frontend"
+
+for p in [str(PROJECT_ROOT), str(BACKEND_DIR), str(FRONTEND_DIR)]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 API_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
@@ -35,18 +39,38 @@ def _get_services():
     if _ai_service is None:
         try:
             from services.ai_service import AIService
-            from services.rag_service import RAGService
-            from services.writer_service import WriterService
-            from services.data_service import DataService
-            from services.tools_service import ToolsService
-
             _ai_service = AIService()
+        except Exception as e:
+            print(f"[Bridge] AI Service error: {e}")
+
+    if _rag_service is None and _ai_service:
+        try:
+            from services.rag_service import RAGService
             _rag_service = RAGService(ai_service=_ai_service)
+        except Exception as e:
+            print(f"[Bridge] RAG Service error: {e}")
+
+    if _writer_service is None and _ai_service:
+        try:
+            from services.writer_service import WriterService
             _writer_service = WriterService(ai_service=_ai_service)
+        except Exception as e:
+            print(f"[Bridge] Writer Service error: {e}")
+
+    if _data_service is None and _ai_service:
+        try:
+            from services.data_service import DataService
             _data_service = DataService(ai_service=_ai_service)
+        except Exception as e:
+            print(f"[Bridge] Data Service error: {e}")
+
+    if _tools_service is None and _ai_service:
+        try:
+            from services.tools_service import ToolsService
             _tools_service = ToolsService(ai_service=_ai_service)
         except Exception as e:
-            print(f"[Bridge] Warning init direct services: {e}")
+            print(f"[Bridge] Tools Service error: {e}")
+
     return _ai_service, _rag_service, _writer_service, _data_service, _tools_service
 
 
@@ -68,7 +92,6 @@ def call_chat(message: str, history: list) -> str:
         except Exception:
             pass
 
-    # Direct fallback
     ai, _, _, _, _ = _get_services()
     if ai:
         return ai.chat(message, history)
@@ -86,16 +109,18 @@ def call_rag_upload(filename: str, file_bytes: bytes) -> dict:
         except Exception:
             pass
 
-    # Direct fallback
     _, rag, _, _, _ = _get_services()
     if rag:
-        temp_dir = tempfile.gettempdir()
-        temp_path = os.path.join(temp_dir, filename)
-        with open(temp_path, "wb") as f:
-            f.write(file_bytes)
-        chunks = rag.process_pdf(temp_path, filename)
-        return {"filename": filename, "chunks": chunks, "message": f"Đã lập chỉ mục {chunks} đoạn văn bản."}
-    return {"filename": filename, "chunks": 0, "message": "Lỗi khởi tạo RAG service."}
+        try:
+            temp_dir = tempfile.gettempdir()
+            temp_path = os.path.join(temp_dir, filename)
+            with open(temp_path, "wb") as f:
+                f.write(file_bytes)
+            chunks = rag.process_pdf(temp_path, filename)
+            return {"filename": filename, "chunks": chunks, "message": f"Đã lập chỉ mục {chunks} đoạn văn bản."}
+        except Exception as e:
+            return {"filename": filename, "chunks": 0, "message": f"Lỗi xử lý file: {str(e)}"}
+    return {"filename": filename, "chunks": 0, "message": "Tính năng RAG chưa khả dụng."}
 
 
 def call_rag_query(query: str, filename: str) -> dict:
@@ -107,12 +132,14 @@ def call_rag_query(query: str, filename: str) -> dict:
         except Exception:
             pass
 
-    # Direct fallback
     _, rag, _, _, _ = _get_services()
     if rag:
-        ans, src = rag.query(query, filename)
-        return {"answer": ans, "sources": src}
-    return {"answer": "Lỗi truy vấn RAG.", "sources": []}
+        try:
+            ans, src = rag.query(query, filename)
+            return {"answer": ans, "sources": src}
+        except Exception as e:
+            return {"answer": f"Lỗi truy vấn: {str(e)}", "sources": []}
+    return {"answer": "Chưa khởi tạo kho vector tài liệu.", "sources": []}
 
 
 def call_rag_list() -> list:
@@ -126,7 +153,10 @@ def call_rag_list() -> list:
 
     _, rag, _, _, _ = _get_services()
     if rag:
-        return rag.list_documents()
+        try:
+            return rag.list_documents()
+        except Exception:
+            return []
     return []
 
 
@@ -189,4 +219,3 @@ def call_tools_process(tool_type: str, text: str, target_lang: str = "English", 
     if tools:
         return tools.process(tool_type, text, target_lang, code_lang)
     return "Lỗi xử lý công cụ."
-

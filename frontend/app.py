@@ -3,6 +3,18 @@ AI PTK - Giao diện chính Streamlit
 """
 
 import os
+import sys
+from pathlib import Path
+
+# Đảm bảo đường dẫn root, frontend, backend đều có trong sys.path
+_CURRENT_DIR = Path(__file__).resolve().parent
+_PROJECT_ROOT = _CURRENT_DIR.parent
+_BACKEND_DIR = _PROJECT_ROOT / "backend"
+
+for _p in [str(_PROJECT_ROOT), str(_CURRENT_DIR), str(_BACKEND_DIR)]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import streamlit as st
 import requests
 
