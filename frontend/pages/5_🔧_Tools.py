@@ -14,11 +14,44 @@ st.markdown(
     """
     <div style="background: linear-gradient(135deg, #FB8C00 0%, #E65100 100%); padding: 20px; border-radius: 12px; color: white; margin-bottom: 20px;">
         <h2 style="margin: 0;">🔧 Bộ Tiện Ích AI Thông Minh</h2>
-        <p style="margin: 5px 0 0 0; opacity: 0.9;">Công cụ nhanh phục vụ học tập và làm việc: Dịch thuật, Viết code, Giải thích thuật toán, Tóm tắt & Sửa văn phạm.</p>
+        <p style="margin: 5px 0 0 0; opacity: 0.9;">Công cụ nhanh phục vụ học tập và làm việc: Dịch thuật, Viết code, Giải thích thuật toán, Tóm tắt & Sửa văn phạm (Hỗ trợ xuất Word & Excel).</p>
     </div>
     """,
     unsafe_allow_html=True,
 )
+
+
+def render_export_buttons(text: str, prefix: str):
+    """Hiển thị nút tải Word và Excel cho kết quả công cụ."""
+    if not text:
+        return
+    st.write("---")
+    try:
+        from service_bridge import export_to_docx, export_to_excel
+        col_x1, col_x2 = st.columns(2)
+        with col_x1:
+            docx_bytes = export_to_docx(text, title=f"AI PTK - {prefix}")
+            st.download_button(
+                label=f"📄 Xuất {prefix} ra Word (.docx)",
+                data=docx_bytes,
+                file_name=f"{prefix.replace(' ', '_')}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                key=f"dl_docx_{prefix}",
+                use_container_width=True,
+            )
+        with col_x2:
+            xlsx_bytes = export_to_excel(text, title=f"AI PTK - {prefix}")
+            st.download_button(
+                label=f"📊 Xuất {prefix} ra Excel (.xlsx)",
+                data=xlsx_bytes,
+                file_name=f"{prefix.replace(' ', '_')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key=f"dl_xlsx_{prefix}",
+                use_container_width=True,
+            )
+    except Exception as e:
+        st.caption(f"Không thể tạo file xuất: {e}")
+
 
 tab_trans, tab_codegen, tab_explain, tab_sum, tab_grammar = st.tabs([
     "🌐 Dịch Thuật",
@@ -45,6 +78,7 @@ with tab_trans:
                     res_text = call_tools_process("translate", text_to_translate, target_lang, "")
                     st.markdown("### Kết quả bản dịch:")
                     st.markdown(res_text)
+                    render_export_buttons(res_text, f"Ban_Dich_{target_lang}")
                 except Exception as e:
                     st.error(f"Lỗi: {e}")
 
@@ -65,6 +99,7 @@ with tab_codegen:
                     res_text = call_tools_process("code_generate", code_desc, "", code_lang)
                     st.markdown("### Mã nguồn được tạo:")
                     st.markdown(res_text)
+                    render_export_buttons(res_text, f"Code_{code_lang}")
                 except Exception as e:
                     st.error(f"Lỗi: {e}")
 
@@ -79,6 +114,7 @@ with tab_explain:
                     from service_bridge import call_tools_process
                     res_text = call_tools_process("code_explain", code_input)
                     st.markdown(res_text)
+                    render_export_buttons(res_text, "Giai_Thich_Code")
                 except Exception as e:
                     st.error(f"Lỗi: {e}")
 
@@ -93,6 +129,7 @@ with tab_sum:
                     from service_bridge import call_tools_process
                     res_text = call_tools_process("summarize", text_to_sum)
                     st.markdown(res_text)
+                    render_export_buttons(res_text, "Tom_Tat_Noi_Dung")
                 except Exception as e:
                     st.error(f"Lỗi: {e}")
 
@@ -107,7 +144,8 @@ with tab_grammar:
                     from service_bridge import call_tools_process
                     res_text = call_tools_process("grammar_fix", text_grammar)
                     st.markdown(res_text)
+                    render_export_buttons(res_text, "Sua_Loi_Van_Pham")
                 except Exception as e:
                     st.error(f"Lỗi: {e}")
-                    st.error(f"Lỗi: {e}")
+
 

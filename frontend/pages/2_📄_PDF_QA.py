@@ -58,22 +58,41 @@ with col2:
             else:
                 with st.spinner("Đang tìm kiếm ngữ cảnh phù hợp và sinh câu trả lời..."):
                     try:
-                        from service_bridge import call_rag_query
+                        from service_bridge import call_rag_query, export_to_docx, export_to_excel
                         ans_data = call_rag_query(question, selected_doc)
-                        if res.status_code == 200:
-                            ans_data = res.json()
-                            st.markdown("### 💡 Câu trả lời từ AI:")
-                            st.markdown(ans_data.get("answer", ""))
+                        answer_text = ans_data.get("answer", "")
+                        st.markdown("### 💡 Câu trả lời từ AI:")
+                        st.markdown(answer_text)
 
-                            sources = ans_data.get("sources", [])
-                            if sources:
-                                with st.expander(f"📚 Xem {len(sources)} đoạn trích nguồn được AI tham khảo"):
-                                    for idx, s in enumerate(sources, 1):
-                                        st.markdown(f"**Trích đoạn {idx}:**")
-                                        st.caption(s)
-                                        st.write("---")
-                        else:
-                            st.error(f"Lỗi: {res.json().get('detail')}")
+                        # Nút xuất Word & Excel
+                        st.write("---")
+                        c_exp1, c_exp2 = st.columns(2)
+                        with c_exp1:
+                            docx_bytes = export_to_docx(answer_text, title=f"Trả lời tra cứu: {selected_doc}")
+                            st.download_button(
+                                label="📄 Xuất câu trả lời ra Word (.docx)",
+                                data=docx_bytes,
+                                file_name=f"Tra_Luu_{selected_doc[:15]}.docx",
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                use_container_width=True,
+                            )
+                        with c_exp2:
+                            xlsx_bytes = export_to_excel(answer_text, title=f"Tra cứu: {selected_doc}")
+                            st.download_button(
+                                label="📊 Xuất ra Excel (.xlsx)",
+                                data=xlsx_bytes,
+                                file_name=f"Tra_Luu_{selected_doc[:15]}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True,
+                            )
+
+                        sources = ans_data.get("sources", [])
+                        if sources:
+                            with st.expander(f"📚 Xem {len(sources)} đoạn trích nguồn được AI tham khảo"):
+                                for idx, s in enumerate(sources, 1):
+                                    st.markdown(f"**Trích đoạn {idx}:**")
+                                    st.caption(s)
+                                    st.write("---")
                     except Exception as e:
                         st.error(f"Lỗi truy vấn: {str(e)}")
     else:

@@ -125,7 +125,7 @@ with col_key:
 st.write("---")
 
 # Hiển thị lịch sử chat
-for msg in st.session_state.chat_history:
+for idx, msg in enumerate(st.session_state.chat_history):
     role = msg.get("role")
     content = msg.get("parts", "")
     img_data = msg.get("image")
@@ -133,6 +133,29 @@ for msg in st.session_state.chat_history:
         if img_data:
             st.image(img_data, width=300)
         st.markdown(content)
+
+        # Thanh nút xuất Word và Excel cho phản hồi của AI
+        if role == "model" and content:
+            from service_bridge import export_to_docx, export_to_excel
+            exp_col1, exp_col2, _ = st.columns([1.5, 1.5, 5])
+            with exp_col1:
+                docx_bytes = export_to_docx(content, title=f"AI PTK - Phản Hồi #{idx+1}")
+                st.download_button(
+                    label="📄 Xuất Word (.docx)",
+                    data=docx_bytes,
+                    file_name=f"AI_PTK_TraLoi_{idx+1}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    key=f"btn_docx_{idx}",
+                )
+            with exp_col2:
+                xlsx_bytes = export_to_excel(content, title=f"AI PTK - Dữ Liệu #{idx+1}")
+                st.download_button(
+                    label="📊 Xuất Excel (.xlsx)",
+                    data=xlsx_bytes,
+                    file_name=f"AI_PTK_Bang_{idx+1}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"btn_xlsx_{idx}",
+                )
 
 # Ô nhập tin nhắn
 if user_prompt := st.chat_input("Nhập câu hỏi hoặc yêu cầu AI phân tích ảnh..."):
@@ -176,7 +199,7 @@ if user_prompt := st.chat_input("Nhập câu hỏi hoặc yêu cầu AI phân t�
                     image_bytes=current_img_bytes,
                     image_mime=current_img_mime,
                 )
-                st.markdown(reply)
                 st.session_state.chat_history.append({"role": "model", "parts": reply})
+                st.rerun()
             except Exception as e:
                 st.error(f"Lỗi: {str(e)}")

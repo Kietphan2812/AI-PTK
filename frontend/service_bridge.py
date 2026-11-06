@@ -192,3 +192,26 @@ def call_tools_process(tool_type: str, text: str, target_lang: str = "English", 
     if tools:
         return tools.process(tool_type, text, target_lang, code_lang)
     return "Lỗi xử lý công cụ."
+
+
+# 6. Xuất bản tài liệu Word (.docx) & Excel (.xlsx)
+def export_to_docx(markdown_text: str, title: str = "Tài liệu AI PTK") -> bytes:
+    try:
+        from services.export_service import ExportService
+        return ExportService.text_to_docx(markdown_text, title=title)
+    except Exception as e:
+        print(f"[Bridge] Lỗi xuất Word: {e}")
+        return b""
+
+
+def export_to_excel(markdown_text_or_df, title: str = "Dữ liệu AI PTK") -> bytes:
+    try:
+        import pandas as pd
+        from services.export_service import ExportService
+        if isinstance(markdown_text_or_df, pd.DataFrame):
+            return ExportService.dataframe_to_excel(markdown_text_or_df, title=title)
+        return ExportService.text_to_excel(str(markdown_text_or_df), title=title)
+    except Exception as e:
+        print(f"[Bridge] Lỗi xuất Excel: {e}")
+        return b""
+

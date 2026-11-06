@@ -58,6 +58,11 @@ with col1:
 
 with col2:
     st.subheader("📄 Kết quả bản thảo")
+    if "writer_result" not in st.session_state:
+        st.session_state.writer_result = ""
+    if "writer_topic" not in st.session_state:
+        st.session_state.writer_topic = ""
+
     if btn_generate:
         if not topic.strip():
             st.warning("Vui lòng nhập chủ đề bài viết.")
@@ -65,12 +70,46 @@ with col2:
             with st.spinner("AI đang soạn thảo nội dung..."):
                 try:
                     from service_bridge import call_writer
-                    content = call_writer(task_type, topic, tone, language, extra_instructions)
-                    st.markdown(content)
-                    st.write("---")
-                    st.text_area("Bản raw để copy:", value=content, height=150)
+                    st.session_state.writer_result = call_writer(task_type, topic, tone, language, extra_instructions)
+                    st.session_state.writer_topic = topic
                 except Exception as e:
                     st.error(f"Lỗi tạo nội dung: {str(e)}")
+
+    if st.session_state.writer_result:
+        content = st.session_state.writer_result
+        curr_topic = st.session_state.writer_topic or "Bai_Viet_AI_PTK"
+        st.markdown(content)
+        st.write("---")
+
+        st.markdown("#### 📥 Xuất bản tài liệu:")
+        from service_bridge import export_to_docx, export_to_excel
+        exp_col1, exp_col2, exp_col3 = st.columns(3)
+        with exp_col1:
+            docx_data = export_to_docx(content, title=curr_topic)
+            st.download_button(
+                label="📄 Xuất Word (.docx)",
+                data=docx_data,
+                file_name=f"{curr_topic[:25].replace(' ', '_')}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True,
+            )
+        with exp_col2:
+            xlsx_data = export_to_excel(content, title=curr_topic)
+            st.download_button(
+                label="📊 Xuất Excel (.xlsx)",
+                data=xlsx_data,
+                file_name=f"{curr_topic[:25].replace(' ', '_')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+        with exp_col3:
+            st.download_button(
+                label="📝 Tải Text (.txt)",
+                data=content.encode("utf-8"),
+                file_name=f"{curr_topic[:25].replace(' ', '_')}.txt",
+                mime="text/plain",
+                use_container_width=True,
+            )
     else:
         st.info("Nhập thông tin bên trái và nhấn nút 'Bắt đầu tạo nội dung' để xem kết quả tại đây.")
 
