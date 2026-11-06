@@ -1,7 +1,7 @@
 """
 Cấu hình ứng dụng AI PTK (Application Configuration)
 =====================================================
-Đọc biến môi trường từ file .env ở thư mục gốc dự án.
+Đọc biến môi trường từ file .env ở thư mục gốc hoặc từ Streamlit Cloud secrets.
 """
 
 import os
@@ -10,7 +10,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BACKEND_DIR = Path(__file__).resolve().parent
 
-# Tự động đọc file .env bằng thư viện chuẩn (không lo thiếu package)
+# Đọc file .env nếu có (khi chạy local)
 env_path = PROJECT_ROOT / ".env"
 if env_path.exists():
     with open(env_path, "r", encoding="utf-8") as f:
@@ -24,7 +24,7 @@ if env_path.exists():
 class Settings:
     """Lớp cấu hình chính."""
 
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    _gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
     GEMINI_MODEL: str = "gemini-3.5-flash"
 
     # Thư mục lưu trữ
@@ -35,12 +35,24 @@ class Settings:
     APP_TITLE: str = "AI PTK – Bộ công cụ AI đa năng"
     APP_VERSION: str = "1.0.0"
 
+    @property
+    def GEMINI_API_KEY(self) -> str:
+        key = os.getenv("GEMINI_API_KEY", "")
+        if not key or key == "your_gemini_api_key_here":
+            try:
+                import streamlit as st
+                if hasattr(st, "secrets") and "GEMINI_API_KEY" in st.secrets:
+                    key = str(st.secrets["GEMINI_API_KEY"])
+            except Exception:
+                pass
+        return key
+
     def validate(self) -> None:
         """Kiểm tra cấu hình bắt buộc."""
         if not self.GEMINI_API_KEY or self.GEMINI_API_KEY == "your_gemini_api_key_here":
             raise ValueError(
                 "GEMINI_API_KEY chưa được cấu hình. "
-                "Hãy mở file .env và điền API key lấy từ https://aistudio.google.com/"
+                "Hãy cấu hình trong file .env hoặc trong Streamlit Secrets."
             )
 
 
